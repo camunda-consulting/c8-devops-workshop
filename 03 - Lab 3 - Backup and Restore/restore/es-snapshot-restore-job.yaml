@@ -1,0 +1,52 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: es-snapshot-restore-job
+spec:
+  template:
+    spec:
+      containers:
+      - name: es-snapshot-restore
+        image: curlimages/curl
+        env:
+          - name: BACKUP_TIME_ID
+            valueFrom:
+              secretKeyRef:
+                name: backup-timeid
+                key: backupTimeId
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          #!/bin/sh
+          
+          # Define Elasticsearch endpoint
+          elasticsearch_endpoint="http://camunda-elasticsearch:9200"
+          
+          # Define the list of repository names
+          repositories="operate-backup optimize-backup tasklist-backup zeebe-backup"
+          
+          # Loop over each repository
+          for repository in $repositories; do
+            echo "Processing repository: $repository"
+            
+            # Query Elasticsearch for all snapshots in the repository
+            response=$(curl -s "$elasticsearch_endpoint/_snapshot/$repository/_all")
+
+            # Attempt to extract snapshot names that include the BACKUP_TIME_ID. This uses a simplistic method with grep and cut.
+            # Note: This method relies on the snapshot names being in a specific format in the response.
+            echo "$response" | grep -o "\"snapshot\":\"[^\"]*$BACKUP_TIME_ID[^\"]*\"" | cut -d':' -f2 | tr -d '"' | while read -r snapshot; do
+              if [ -n "$snapshot" ]; then
+                echo "Found snapshot matching criteria: $snapshot in $repository"
+                # Restore the found snapshot
+                echo "Restoring snapshot: $snapshot in repository: $repository"
+                curl --request POST "$elasticsearch_endpoint/_snapshot/$repository/$snapshot/_restore?wait_for_completion=true"
+                echo "Restore completed for snapshot: $snapshot in repository: $repository"
+              else
+                echo "No matching snapshots found in repository $repository."
+              fi
+            done
+          done
+          
+          echo "Restore operations for all repositories completed."
+      restartPolicy: OnFailure

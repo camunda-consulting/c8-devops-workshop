@@ -1,0 +1,127 @@
+global:
+  ingress:
+    enabled: true
+    className: nginx
+    host: "jensil.de"
+    tls:
+      ## @param global.ingress.tls.enabled if true, then tls is configured on the ingress resource. If enabled the Ingress.host need to be defined.
+      enabled: true
+      ## @param global.ingress.tls.secretName defines the secret name which contains the TLS private key and certificate
+      secretName: "tls-secret"
+    annotations:
+      cert-manager.io/issuer: "letsencrypt-prod"
+      ingress.kubernetes.io/rewrite-target: "/"
+      nginx.ingress.kubernetes.io/ssl-redirect: "false"
+  identity:
+    auth:
+      publicIssuerUrl: "https://jensil.de/auth/realms/camunda-platform"
+      operate:
+        redirectUrl: "https://jensil.de/operate"
+      tasklist:
+        redirectUrl: "https://jensil.de/tasklist"
+      optimize:
+        redirectUrl: "https://jensil.de/optimize"
+
+
+identity:
+  contextPath: "/identity"
+  enabled: true
+  fullURL: "https://jensil.de/identity"
+
+connectors:
+  enabled: false
+
+operate:
+  contextPath: "/operate"
+  env:
+  - name: CAMUNDA_OPERATE_BACKUP_REPOSITORY_NAME
+    value: "operate-backup"
+
+optimize:
+  contextPath: "/optimize"
+  env:
+  - name: CAMUNDA_OPTIMIZE_BACKUP_REPOSITORY_NAME
+    value: "optimize-backup"
+
+tasklist:
+  contextPath: "/tasklist"
+  env:
+  - name: CAMUNDA_TASKLIST_BACKUP_REPOSITORY_NAME
+    value: "tasklist-backup"
+
+zeebe-gateway:
+  ingress:
+    enabled: true
+    path: "/zeebe"
+    className: nginx
+    host: "jensil.de"
+    annotations:
+      cert-manager.io/issuer: "letsencrypt-prod"
+      ingress.kubernetes.io/rewrite-target: "/"
+      nginx.ingress.kubernetes.io/ssl-redirect: "false"
+      nginx.ingress.kubernetes.io/backend-protocol: "GRPC"
+      nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+    tls:
+      ## @param global.ingress.tls.enabled if true, then tls is configured on the ingress resource. If enabled the Ingress.host need to be defined.
+      enabled: true
+      ## @param global.ingress.tls.secretName defines the secret name which contains the TLS private key and certificate
+      secretName: "tls-secret"
+  env:
+  - name: ZEEBE_GATEWAY_SECURITY_AUTHENTICATION_MODE
+    value: none
+# Backup
+zeebe:
+  env:
+  - name: ZEEBE_BROKER_DATA_BACKUP_STORE
+    value: "S3"
+  - name: ZEEBE_BROKER_DATA_BACKUP_S3_BUCKETNAME
+    value: "zeebe-backup"
+  - name: ZEEBE_BROKER_DATA_BACKUP_S3_FORCEPATHSTYLEACCESS
+    value: "true"
+  - name: ZEEBE_BROKER_DATA_BACKUP_S3_ENDPOINT
+    value: "http://minio:9000"
+  - name: ZEEBE_BROKER_DATA_BACKUP_S3_ACCESSKEY
+    value: "minioadmin"
+  - name: ZEEBE_BROKER_DATA_BACKUP_S3_SECRETKEY
+    value: "minioadmin"
+  - name: ZEEBE_BROKER_DATA_BACKUP_S3_REGION
+    value: "us-east-1"
+
+elasticsearch:
+  global:
+   kibanaEnabled: true
+  kibana:
+    image:
+      tag: 8.9.2
+    ingress:
+      tls: true
+      ingressClassName: nginx
+      enabled: true
+      hostname: "jensil.de"
+      path: "/kibana"
+      annotations:
+        cert-manager.io/issuer: "letsencrypt-prod"
+        ingress.kubernetes.io/rewrite-target: "/"
+        nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    configuration:
+      server:
+        basePath: "/kibana"
+        rewriteBasePath: true
+    readinessProbe:
+      enabled: false
+  initScripts:
+    init-keystore.sh: |
+      #!/bin/bash
+      set -e
+
+      echo "Adding S3 access keys to Elasticsearch keystore..."
+
+      # Add S3 client default keys to the keystore
+      echo "$S3_SECRET_KEY" | elasticsearch-keystore add -x s3.client.default.secret_key
+      echo "$S3_ACCESS_KEY" | elasticsearch-keystore add -x s3.client.default.access_key
+
+  extraEnvVars:
+  - name: S3_SECRET_KEY
+    value: minioadmin
+  - name: S3_ACCESS_KEY
+    value: minioadmin

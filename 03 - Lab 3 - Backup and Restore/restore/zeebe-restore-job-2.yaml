@@ -1,0 +1,60 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: zeebe-restore-job-2
+spec:
+  template:
+    spec:
+      containers:
+      - name: zeebe-restore
+        image: camunda/zeebe:8.4.5 # Adjust based on your Zeebe version
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          ls -laR /usr/local/zeebe/data;
+          rm -rf /usr/local/zeebe/data/* /usr/local/zeebe/data/.*;
+          echo "Starting restoration process..."
+          ls -laR /usr/local/zeebe/data;
+          /usr/local/zeebe/bin/restore --backupId=${ZEEBE_RESTORE_FROM_BACKUP_ID}
+          echo "Restoration complete."
+        env:
+        - name: ZEEBE_RESTORE_FROM_BACKUP_ID
+          valueFrom:
+            secretKeyRef:
+              name: backup-timeid
+              key: backupTimeId
+        - name: ZEEBE_BROKER_DATA_BACKUP_STORE
+          value: "S3"
+        - name: ZEEBE_BROKER_DATA_BACKUP_S3_BUCKETNAME
+          value: "zeebe-backup"
+        - name: ZEEBE_BROKER_DATA_BACKUP_S3_FORCEPATHSTYLEACCESS
+          value: "true"
+        - name: ZEEBE_BROKER_DATA_BACKUP_S3_ENDPOINT
+          value: "http://minio:9000"
+        - name: ZEEBE_BROKER_DATA_BACKUP_S3_ACCESSKEY
+          value: "minioadmin"
+        - name: ZEEBE_BROKER_DATA_BACKUP_S3_SECRETKEY
+          value: "minioadmin"
+        - name: ZEEBE_BROKER_DATA_BACKUP_S3_REGION
+          value: "us-east-1"
+        - name: ZEEBE_BROKER_CLUSTER_NODEID
+          value: "2"
+        - name: ZEEBE_BROKER_CLUSTER_PARTITIONSCOUNT
+          value: "3"
+        - name: ZEEBE_BROKER_CLUSTER_CLUSTERSIZE
+          value: "3"
+        - name: ZEEBE_BROKER_CLUSTER_REPLICATIONFACTOR
+          value: "3"
+        volumeMounts:
+        - name: data
+          mountPath: /usr/local/zeebe/data
+        securityContext:
+          runAsUser: 1000
+          runAsNonRoot: true
+      securityContext:
+        fsGroup: 1000 
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: data-camunda-zeebe-2
+      restartPolicy: OnFailure

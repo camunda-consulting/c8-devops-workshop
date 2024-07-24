@@ -1,0 +1,27 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: es-delete-all-indices-job
+spec:
+  template:
+    spec:
+      containers:
+      - name: delete-indices
+        image: curlimages/curl
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          # Define Elasticsearch endpoint
+          elasticsearch_endpoint="http://camunda-elasticsearch:9200"
+          
+          # List all non-system indices (excluding those starting with .)
+          indices=$(curl -s "$elasticsearch_endpoint/_cat/indices?h=index" | grep -v '^\.')
+          
+          # Delete each index individually
+          for index in $indices; do
+            echo "Deleting index: $index"
+            curl -X DELETE "$elasticsearch_endpoint/$index"
+          done
+          
+          echo "All non-system indices have been deleted."
+      restartPolicy: Never

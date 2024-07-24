@@ -1,0 +1,39 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: es-create-snapshot-zeebe
+spec:
+  template:
+    spec:
+      containers:
+      - name: es-snapshot
+        image: curlimages/curl
+        env:
+        - name: BACKUP_TIME_ID
+          valueFrom:
+            secretKeyRef:
+              name: backup-timeid
+              key: backupTimeId
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          #!/bin/sh
+          # Define repository
+          repository="zeebe-backup"
+
+          # Retrieve backupTimeId from the environment variable and define snapshot name
+          snapshot_name="camunda_zeebe_records_backup_${BACKUP_TIME_ID}"
+
+          # Define Elasticsearch endpoint
+          elasticsearch_endpoint="http://camunda-elasticsearch:9200"
+
+          # Create the snapshot
+          curl -X PUT "$elasticsearch_endpoint/_snapshot/$repository/$snapshot_name" -H 'Content-Type: application/json' -d '
+          {
+             "indices": "zeebe-record*",
+             "feature_states": ["none"]
+          }'
+
+          echo "Snapshot $snapshot_name created in repository $repository."
+      restartPolicy: OnFailure

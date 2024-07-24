@@ -1,0 +1,62 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: camunda-backup-job
+spec:
+  template:
+    spec:
+      containers:
+      - name: backup-script
+        image: curlimages/curl
+        env:
+          - name: BACKUP_TIME_ID
+            valueFrom:
+              secretKeyRef:
+                name: backup-timeid
+                key: backupTimeId
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          perform_backup() {
+            local service_name=$1
+            local service_port=$2
+            local path_prefix=$3
+            local fail_count=0
+
+            # Perform backup
+            curl -X POST "http://camunda-$service_name:$service_port$path_prefix/actuator/backups" \
+              -H 'Content-Type: application/json' \
+              -d "{\"backupId\": \"$BACKUP_TIME_ID\"}"
+            sleep 5
+
+            # Validate backup
+            while true; do
+              response=$(curl -s "http://camunda-$service_name:$service_port$path_prefix/actuator/backups/$BACKUP_TIME_ID")
+              echo "$response"
+              if echo "$response" | grep -q '"COMPLETED"'; then
+                echo "Backup for $service_name completed successfully."
+                break
+              elif echo "$response" | grep -q '"IN_PROGRESS"'; then
+                echo "Backup for $service_name in progress, checking again in 30s."
+                sleep 30
+              else
+                echo "Backup for $service_name failed or in an unknown state."
+                fail_count=$((fail_count+1))
+                if [ $fail_count -ge 3 ]; then
+                  echo "Failed 3 times for $service_name, exiting."
+                  exit 1
+                else
+                  echo "Retrying for $service_name, attempt $fail_count of 3."
+                  sleep 30
+                fi
+              fi
+            done
+          }
+
+
+          # Call function for each service
+          perform_backup "optimize" "8092" ""
+          perform_backup "operate" "80" "/operate"
+          perform_backup "tasklist" "80" "/tasklist"
+      restartPolicy: Never

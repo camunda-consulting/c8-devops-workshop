@@ -1,0 +1,19 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: zeebe-export-resume
+spec:
+  template:
+    spec:
+      containers:
+      - name: resume-exporting
+        image: curlimages/curl
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          curl -X POST "http://camunda-zeebe-gateway:9600/actuator/exporting/resume" \
+            -H 'Content-Type: application/json' \
+            -d '{}'
+          echo "Exporting resumed on camunda-zeebe-gateway."
+      restartPolicy: Never

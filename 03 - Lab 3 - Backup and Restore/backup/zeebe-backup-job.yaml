@@ -1,0 +1,53 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: zeebe-backup-job
+spec:
+  template:
+    spec:
+      containers:
+      - name: zeebe-backup-script
+        image: curlimages/curl
+        env:
+          - name: BACKUP_TIME_ID
+            valueFrom:
+              secretKeyRef:
+                name: backup-timeid
+                key: backupTimeId
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          # Trigger the backup
+          curl -X POST "http://camunda-zeebe-gateway:9600/actuator/backups" \
+            -H 'Content-Type: application/json' \
+            -d "{\"backupId\": \"$BACKUP_TIME_ID\"}"
+          echo "Backup trigger request sent for ID $BACKUP_TIME_ID"
+          sleep 5
+
+          # Monitor backup status
+          fail_count=0
+          while true; do
+            response=$(curl -s "http://camunda-zeebe-gateway:9600/actuator/backups/$BACKUP_TIME_ID")
+            echo "$response"
+            
+            # Check if the response includes the specific backupId and state COMPLETED
+            if echo "$response" | grep -q "\"backupId\":$BACKUP_TIME_ID,\"state\":\"COMPLETED\""; then
+              echo "Backup $BACKUP_TIME_ID completed successfully."
+              break
+            elif echo "$response" | grep -q "\"state\":\"IN_PROGRESS\""; then
+              echo "Backup $BACKUP_TIME_ID in progress, checking again in 30s."
+              sleep 30
+            else
+              echo "Backup $BACKUP_TIME_ID failed or in an unknown state."
+              fail_count=$((fail_count+1))
+              if [ $fail_count -ge 3 ]; then
+                echo "Failed 3 times, exiting."
+                exit 1
+              else
+                echo "Retrying, attempt $fail_count of 3."
+                sleep 30
+              fi
+            fi
+          done
+      restartPolicy: Never

@@ -1,0 +1,38 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: es-snapshot-minio-job
+spec:
+  template:
+    spec:
+      containers:
+      - name: es-snapshot
+        image: curlimages/curl
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          #!/bin/sh
+          # Define bucket names
+          buckets="operate-backup optimize-backup tasklist-backup zeebe-backup"
+          
+          # MinIO specific settings
+          endpoint="http://minio:9000" # Use the MinIO service URL as the endpoint
+
+          # Iterate over each bucket name to register it as a snapshot repository without specifying access and secret keys
+          for bucket in $buckets; do
+            curl -X PUT "http://camunda-elasticsearch:9200/_snapshot/$bucket" -H 'Content-Type: application/json' -d '
+            {
+              "type": "s3",
+              "settings": {
+                "bucket": "'"$bucket"'",
+                "endpoint": "'"$endpoint"'",
+                "protocol": "http",
+                "compress": true,
+                "client": "default",
+                "path_style_access": true
+              }
+            }'
+            echo "Repository $bucket registered with MinIO using keystore credentials."
+          done
+      restartPolicy: OnFailure
