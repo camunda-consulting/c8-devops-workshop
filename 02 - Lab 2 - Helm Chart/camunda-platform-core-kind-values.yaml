@@ -9,6 +9,10 @@ global:
 identity:
   enabled: false
 
+# Disable keycloak
+identityKeycloak:
+  enabled: false
+
 optimize:
   enabled: false
 
@@ -20,7 +24,7 @@ zeebe:
   replicationFactor: 1
   pvcSize: 10Gi
 
-zeebe-gateway:
+zeebeGateway:
   replicas: 1
 
 connectors:
