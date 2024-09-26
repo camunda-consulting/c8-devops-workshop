@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
       - name: zeebe-restore
-        image: camunda/zeebe:8.4.5 # Adjust based on your Zeebe version
+        image: camunda/zeebe:8.5.7 # Adjust based on your Zeebe version
         command: ["/bin/bash", "-c"]
         args:
         - |
