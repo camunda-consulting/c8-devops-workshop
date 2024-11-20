@@ -73,17 +73,27 @@ kubectl delete pvc elasticsearch-master-elasticsearch-master-0
 kubectl delete pvc elasticsearch-master-elasticsearch-master-1
 ```
 
-### Edit elasticsearch-master PVs manually
-***MANUAL STEPS SINCE MY SCRIPT BROKE AND COST ME LIKE 5 HOURS. ORIGINAL SCRIPT AT THE BOTTOM, TO-BE-FIXED/AUTOMATED AGAIN***
-
-PV: Delete resourceVersion 
-claimRef: Delete resourceVersion, UUID
-claimRef: Edit the claimRef to include the name of the new PVCs that will appear after the upgrade.  
---> data-camunda-elasticsearch-master-0  
---> data-camunda-elasticsearch-master-1
+### Edit elasticsearch-master PVs
 
 
-## actual upgrade
+# Remove resourceVersion and UUID from claimRef
+
+```bash
+  PV_JSON=$(kubectl get pv "$PV_NAME" -o json | \
+    jq 'del(.metadata.resourceVersion) | del(.spec.claimRef.resourceVersion) | del(.spec.claimRef.uid)')
+  TEMP_FILE=$(mktemp)
+  echo "$PV_JSON" > "$TEMP_FILE"
+  echo "Replacing PersistentVolume: $PV_NAME"
+  kubectl replace -f "$TEMP_FILE"
+  rm "$TEMP_FILE"
+
+  # Edit claimRef to point to the new PVC
+  NEW_PVC_NAME="data-${HELM_RELEASE_NAME}-${STATEFULSET_NAME}-${i}"
+  echo "Updating claimRef to new PVC: $NEW_PVC_NAME"
+  kubectl patch pv "$PV_NAME" -p "{\"spec\":{\"claimRef\":{\"name\":\"$NEW_PVC_NAME\"}}}"
+```
+
+### actual upgrade
 
 ```bash
 kubectl -n camunda delete deployment camunda-operate
@@ -124,25 +134,77 @@ helm upgrade -f ./Camunda8.5.0-with-ES8.13.0-values.yaml  camunda camunda/camund
 ![Screenshot Operate 8.5.0 after cancel](images/state-operate-8.5.0-after-cancel.png)
 
 
-
-
-
-
-## broken scripts:
+## Complete Script for 8.2 > 8.3 Upgrade Preperation:
 
 Make PVs bind to new Elastic PVCs
 ```bash
-kubectl get pv -o yaml | yq -r '.items[] | select(.spec.claimRef != null) | select(.spec.claimRef.name == "elasticsearch-master-elasticsearch-master-0")' > master-0.yaml
-yq eval 'del(.metadata.resourceVersion, .spec.claimRef.resourceVersion, .spec.claimRef.uuid, .spec.claimRef.name)' -i master-0.yaml
-yq eval '.spec.claimRef.name = "data-camunda-elasticsearch-master-0"' -i master-0.yaml
-kubectl apply -f master-0.yaml
-rm master-0.yaml
-```
+#!/bin/bash
 
-```bash
-kubectl get pv -o yaml | yq -r '.items[] | select(.spec.claimRef != null) | select(.spec.claimRef.name == "elasticsearch-master-elasticsearch-master-1")' > master-1.yaml
-yq eval 'del(.metadata.resourceVersion, .spec.claimRef.resourceVersion, .spec.claimRef.uuid, .spec.claimRef.name)' -i master-1.yaml
-yq eval '.spec.claimRef.name = "data-camunda-elasticsearch-master-1"' -i master-1.yaml
-kubectl apply -f master-1.yaml
-rm master-1.yaml
+# Variables
+NAMESPACE="default" # Change this to your target namespace
+STATEFULSET_NAME="elasticsearch-master"
+HELM_RELEASE_NAME="camunda" # Helm release name
+
+# Update deprecated Elasticsearch properties
+echo "Updating Elasticsearch properties..."
+kubectl -n "$NAMESPACE" set env statefulset/"$STATEFULSET_NAME" node.roles='data','ingest','master','remote_cluster_client','ml'
+
+kubectl -n "$NAMESPACE" set env statefulset/"$STATEFULSET_NAME" node.data-
+kubectl -n "$NAMESPACE" set env statefulset/"$STATEFULSET_NAME" node.ingest-
+kubectl -n "$NAMESPACE" set env statefulset/"$STATEFULSET_NAME" node.master-
+kubectl -n "$NAMESPACE" set env statefulset/"$STATEFULSET_NAME" node.remote_cluster_client-
+kubectl -n "$NAMESPACE" set env statefulset/"$STATEFULSET_NAME" node.ml-
+
+# Data retention in ES - Update PVs dynamically
+echo "Updating PersistentVolume ReclaimPolicy and cleaning up PVCs..."
+
+# Get the number of replicas (pods) in the StatefulSet
+REPLICAS=$(kubectl -n "$NAMESPACE" get statefulset "$STATEFULSET_NAME" -o jsonpath='{.spec.replicas}')
+
+# Scale down the StatefulSet
+echo "Scaling down the StatefulSet..."
+kubectl -n "$NAMESPACE" scale statefulset "$STATEFULSET_NAME" --replicas=0
+
+# Loop through each replica and update its PV
+for ((i=0; i<REPLICAS; i++)); do
+  PVC_NAME="${STATEFULSET_NAME}-${STATEFULSET_NAME}-${i}"
+  PV_NAME=$(kubectl -n "$NAMESPACE" get pvc "$PVC_NAME" -o jsonpath='{.spec.volumeName}')
+  
+  echo "Patching PV: $PV_NAME"
+  kubectl patch pv "$PV_NAME" -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+  
+  echo "Modifying PersistentVolume: $PV_NAME"
+  
+  # Remove resourceVersion and UUID from claimRef
+  PV_JSON=$(kubectl get pv "$PV_NAME" -o json | \
+    jq 'del(.metadata.resourceVersion) | del(.spec.claimRef.resourceVersion) | del(.spec.claimRef.uid)')
+  TEMP_FILE=$(mktemp)
+  echo "$PV_JSON" > "$TEMP_FILE"
+  echo "Replacing PersistentVolume: $PV_NAME"
+  kubectl replace -f "$TEMP_FILE"
+  rm "$TEMP_FILE"
+
+  # Edit claimRef to point to the new PVC
+  NEW_PVC_NAME="data-${HELM_RELEASE_NAME}-${STATEFULSET_NAME}-${i}"
+  echo "Updating claimRef to new PVC: $NEW_PVC_NAME"
+  kubectl patch pv "$PV_NAME" -p "{\"spec\":{\"claimRef\":{\"name\":\"$NEW_PVC_NAME\"}}}"
+  
+  echo "Deleting old PVC: $PVC_NAME"
+  kubectl -n "$NAMESPACE" delete pvc "$PVC_NAME"
+done
+
+# Delete deployments
+echo "Deleting deployments for Helm release: $HELM_RELEASE_NAME in namespace: $NAMESPACE"
+kubectl -n "$NAMESPACE" delete deployment "${HELM_RELEASE_NAME}-operate"
+kubectl -n "$NAMESPACE" delete deployment "${HELM_RELEASE_NAME}-tasklist"
+kubectl -n "$NAMESPACE" delete deployment "${HELM_RELEASE_NAME}-zeebe-gateway"
+
+# Delete StatefulSet
+echo "Deleting StatefulSet for Helm release: $HELM_RELEASE_NAME in namespace: $NAMESPACE"
+kubectl -n "$NAMESPACE" delete statefulset "${HELM_RELEASE_NAME}-zeebe"
+
+echo "All specified resources for Helm release: $HELM_RELEASE_NAME have been deleted from namespace: $NAMESPACE"
+
+
+echo "Upgrade prepared."
 ```
