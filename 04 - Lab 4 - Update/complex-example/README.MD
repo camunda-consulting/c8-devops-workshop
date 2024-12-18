@@ -139,7 +139,7 @@ helm upgrade -f ./Camunda8.5.0-with-ES8.13.0-values.yaml  camunda camunda/camund
 Make PVs bind to new Elastic PVCs
 ```bash
 #!/bin/bash
-
+set -e
 # Variables
 NAMESPACE="default" # Change this to your target namespace
 STATEFULSET_NAME="elasticsearch-master"
