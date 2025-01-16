@@ -11,12 +11,11 @@ spec:
         command: ["/bin/bash", "-c"]
         args:
         - |
-          ls -laR /usr/local/zeebe/data;
-          rm -rf /usr/local/zeebe/data/* /usr/local/zeebe/data/.*;
+          ls -laR /usr/local/zeebe/data
+          rm -rf /usr/local/zeebe/data/{*,.*}
           echo "Starting restoration process..."
-          ls -laR /usr/local/zeebe/data;
-          /usr/local/zeebe/bin/restore --backupId=${ZEEBE_RESTORE_FROM_BACKUP_ID}
-          echo "Restoration complete."
+          ls -laR /usr/local/zeebe/data
+          /usr/local/zeebe/bin/restore --backupId=${ZEEBE_RESTORE_FROM_BACKUP_ID} && echo "Restoration complete."
         env:
         - name: ZEEBE_RESTORE_FROM_BACKUP_ID
           valueFrom:
@@ -48,9 +47,6 @@ spec:
         volumeMounts:
         - name: data
           mountPath: /usr/local/zeebe/data
-        securityContext:
-          runAsUser: 1000
-          runAsNonRoot: true
       securityContext:
         fsGroup: 1000 
       volumes:

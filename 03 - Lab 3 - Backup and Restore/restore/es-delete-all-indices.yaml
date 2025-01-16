@@ -11,6 +11,7 @@ spec:
         command: ["/bin/sh", "-c"]
         args:
         - |
+          set -eo pipefail
           # Define Elasticsearch endpoint
           elasticsearch_endpoint="http://camunda-elasticsearch:9200"
           
@@ -20,7 +21,7 @@ spec:
           # Delete each index individually
           for index in $indices; do
             echo "Deleting index: $index"
-            curl -X DELETE "$elasticsearch_endpoint/$index"
+            curl --fail -X DELETE "$elasticsearch_endpoint/$index"
           done
           
           echo "All non-system indices have been deleted."

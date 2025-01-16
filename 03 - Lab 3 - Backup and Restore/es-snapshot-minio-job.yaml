@@ -13,6 +13,8 @@ spec:
         - -c
         - |
           #!/bin/sh
+          set -e
+
           # Define bucket names
           buckets="operate-backup optimize-backup tasklist-backup zeebe-backup"
           
@@ -21,7 +23,7 @@ spec:
 
           # Iterate over each bucket name to register it as a snapshot repository without specifying access and secret keys
           for bucket in $buckets; do
-            curl -X PUT "http://camunda-elasticsearch:9200/_snapshot/$bucket" -H 'Content-Type: application/json' -d '
+            curl --fail -X PUT "http://camunda-elasticsearch:9200/_snapshot/$bucket" -H 'Content-Type: application/json' -d '
             {
               "type": "s3",
               "settings": {

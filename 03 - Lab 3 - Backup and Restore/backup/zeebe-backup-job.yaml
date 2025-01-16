@@ -18,8 +18,10 @@ spec:
         args:
         - -c
         - |
+          set -e
+
           # Trigger the backup
-          curl -X POST "http://camunda-zeebe-gateway:9600/actuator/backups" \
+          curl --fail -X POST "http://camunda-zeebe-gateway:9600/actuator/backups" \
             -H 'Content-Type: application/json' \
             -d "{\"backupId\": \"$BACKUP_TIME_ID\"}"
           echo "Backup trigger request sent for ID $BACKUP_TIME_ID"
@@ -28,7 +30,7 @@ spec:
           # Monitor backup status
           fail_count=0
           while true; do
-            response=$(curl -s "http://camunda-zeebe-gateway:9600/actuator/backups/$BACKUP_TIME_ID")
+            response=$(curl --fail -s "http://camunda-zeebe-gateway:9600/actuator/backups/$BACKUP_TIME_ID")
             echo "$response"
             
             # Check if the response includes the specific backupId and state COMPLETED

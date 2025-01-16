@@ -19,6 +19,8 @@ spec:
         - -c
         - |
           #!/bin/sh
+          set -e
+
           # Define repository
           repository="zeebe-backup"
 
@@ -29,7 +31,7 @@ spec:
           elasticsearch_endpoint="http://camunda-elasticsearch:9200"
 
           # Create the snapshot
-          curl -X PUT "$elasticsearch_endpoint/_snapshot/$repository/$snapshot_name" -H 'Content-Type: application/json' -d '
+          curl --fail -X PUT "$elasticsearch_endpoint/_snapshot/$repository/$snapshot_name" -H 'Content-Type: application/json' -d '
           {
              "indices": "zeebe-record*",
              "feature_states": ["none"]

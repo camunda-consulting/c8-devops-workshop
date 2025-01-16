@@ -19,7 +19,8 @@ spec:
         - -c
         - |
           #!/bin/sh
-          
+          set -eo pipefail
+
           # Define Elasticsearch endpoint
           elasticsearch_endpoint="http://camunda-elasticsearch:9200"
           
@@ -31,7 +32,7 @@ spec:
             echo "Processing repository: $repository"
             
             # Query Elasticsearch for all snapshots in the repository
-            response=$(curl -s "$elasticsearch_endpoint/_snapshot/$repository/_all")
+            response=$(curl --fail -s "$elasticsearch_endpoint/_snapshot/$repository/_all")
 
             # Attempt to extract snapshot names that include the BACKUP_TIME_ID. This uses a simplistic method with grep and cut.
             # Note: This method relies on the snapshot names being in a specific format in the response.
@@ -40,7 +41,7 @@ spec:
                 echo "Found snapshot matching criteria: $snapshot in $repository"
                 # Restore the found snapshot
                 echo "Restoring snapshot: $snapshot in repository: $repository"
-                curl --request POST "$elasticsearch_endpoint/_snapshot/$repository/$snapshot/_restore?wait_for_completion=true"
+                curl --fail --request POST "$elasticsearch_endpoint/_snapshot/$repository/$snapshot/_restore?wait_for_completion=true"
                 echo "Restore completed for snapshot: $snapshot in repository: $repository"
               else
                 echo "No matching snapshots found in repository $repository."

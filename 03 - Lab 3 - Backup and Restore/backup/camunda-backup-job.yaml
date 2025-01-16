@@ -18,6 +18,8 @@ spec:
         args:
         - -c
         - |
+          set -e
+
           perform_backup() {
             local service_name=$1
             local service_port=$2
@@ -25,14 +27,14 @@ spec:
             local fail_count=0
 
             # Perform backup
-            curl -X POST "http://camunda-$service_name:$service_port$path_prefix/actuator/backups" \
+            curl --fail -X POST "http://camunda-$service_name:$service_port$path_prefix/actuator/backups" \
               -H 'Content-Type: application/json' \
               -d "{\"backupId\": \"$BACKUP_TIME_ID\"}"
             sleep 5
 
             # Validate backup
             while true; do
-              response=$(curl -s "http://camunda-$service_name:$service_port$path_prefix/actuator/backups/$BACKUP_TIME_ID")
+              response=$(curl --fail -s "http://camunda-$service_name:$service_port$path_prefix/actuator/backups/$BACKUP_TIME_ID")
               echo "$response"
               if echo "$response" | grep -q '"COMPLETED"'; then
                 echo "Backup for $service_name completed successfully."
