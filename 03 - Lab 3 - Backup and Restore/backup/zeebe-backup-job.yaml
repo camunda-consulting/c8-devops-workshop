@@ -44,7 +44,7 @@ spec:
               echo "Backup $BACKUP_TIME_ID failed or in an unknown state."
               fail_count=$((fail_count+1))
               if [ $fail_count -ge 3 ]; then
-                echo "Failed 3 times, exiting."
+                echo "ERROR: Failed 3 times, exiting." >&2
                 exit 1
               else
                 echo "Retrying, attempt $fail_count of 3."

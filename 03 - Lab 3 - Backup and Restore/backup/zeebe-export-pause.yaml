@@ -15,5 +15,11 @@ spec:
           curl --fail -X POST "http://camunda-zeebe-gateway:9600/actuator/exporting/pause?soft=true" \
             -H 'Content-Type: application/json' \
             -d '{}'
-          echo "Exporting paused on camunda-zeebe-gateway."
+          success=$?
+          if [ "$success" ]; then
+            echo "Exporting paused on camunda-zeebe-gateway."
+          else
+            echo "ERROR: Could not pause exporting on camunda-zeebe-gateway"  >&2
+            exit 1
+          fi
       restartPolicy: Never

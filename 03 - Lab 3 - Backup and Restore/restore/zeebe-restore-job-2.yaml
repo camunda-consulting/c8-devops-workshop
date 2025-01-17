@@ -11,11 +11,15 @@ spec:
         command: ["/bin/bash", "-c"]
         args:
         - |
-          ls -laR /usr/local/zeebe/data
+          ls -lAR /usr/local/zeebe/data
           rm -rf /usr/local/zeebe/data/{*,.*}
           echo "Starting restoration process..."
-          ls -laR /usr/local/zeebe/data
-          /usr/local/zeebe/bin/restore --backupId=${ZEEBE_RESTORE_FROM_BACKUP_ID} && echo "Restoration complete."
+          if [-z "$(ls -A /usr/local/zeebe/data)"]; then
+            /usr/local/zeebe/bin/restore --backupId=${ZEEBE_RESTORE_FROM_BACKUP_ID} && echo "Restoration complete."
+          else
+            echo "ERROR: Could not delete zeebe data" >&2
+            exit 1
+          fi
         env:
         - name: ZEEBE_RESTORE_FROM_BACKUP_ID
           valueFrom:

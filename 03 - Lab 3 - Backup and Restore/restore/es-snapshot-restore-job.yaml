@@ -44,7 +44,8 @@ spec:
                 curl --fail --request POST "$elasticsearch_endpoint/_snapshot/$repository/$snapshot/_restore?wait_for_completion=true"
                 echo "Restore completed for snapshot: $snapshot in repository: $repository"
               else
-                echo "No matching snapshots found in repository $repository."
+                echo "ERROR: No matching snapshots found in repository $repository." >&2
+                exit 1
               fi
             done
           done
