@@ -12,6 +12,7 @@ spec:
         args:
         - -c
         - |
+          #!/bin/bash
           curl --fail -X POST "http://camunda-zeebe-gateway:9600/actuator/exporting/pause?soft=true" \
             -H 'Content-Type: application/json' \
             -d '{}'
