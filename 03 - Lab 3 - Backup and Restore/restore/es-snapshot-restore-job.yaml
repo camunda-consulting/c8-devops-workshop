@@ -24,7 +24,7 @@ spec:
           elasticsearch_endpoint="http://camunda-elasticsearch:9200"
           
           # Define the list of repository names
-          repositories="operate-backup optimize-backup tasklist-backup zeebe-backup"
+          repositories="operate-backup optimize-backup zeebe-backup"
           
           # Loop over each repository
           for repository in $repositories; do

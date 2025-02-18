@@ -14,10 +14,10 @@ optimize:
   - name: CAMUNDA_OPTIMIZE_BACKUP_REPOSITORY_NAME
     value: "optimize-backup"
 
-tasklist:
-  env:
-  - name: CAMUNDA_TASKLIST_BACKUP_REPOSITORY_NAME
-    value: "tasklist-backup"
+#tasklist:
+#  env:
+#  - name: CAMUNDA_TASKLIST_BACKUP_REPOSITORY_NAME
+#    value: "tasklist-backup"
 
 zeebe-gateway:
   replicas: 1

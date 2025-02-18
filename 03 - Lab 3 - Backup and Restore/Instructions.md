@@ -48,7 +48,7 @@ kubectl create configmap payload --from-file=./backup/payload.json
 
 ```bash
 kubectl apply -f ./backup/benchmark.yaml
-sleep 30
+sleep 45
 kubectl delete -f ./backup/benchmark.yaml
 ```
 
@@ -63,7 +63,7 @@ kubectl delete -f ./backup/benchmark.yaml
 ./backup/create-backupId-as-secret.sh
 ```
 
-### Trigger Backup for Operate, Tasklist and Optimize
+### Trigger Backup for Operate and Optimize
 
 ```bash
 kubectl apply -f ./backup/camunda-backup-job.yaml
@@ -72,6 +72,12 @@ kubectl apply -f ./backup/camunda-backup-job.yaml
 ```bash
 kubectl logs -f $(kubectl get pods --selector=job-name=camunda-backup-job --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
 ```
+
+### +++NEW+++ Backup tasklist +++NEW+++
+```bash
+./backup-tasklist.sh
+```
+
 ### Pause Exporting
 
 ```bash
@@ -152,6 +158,57 @@ kubectl apply -f restore/es-delete-all-indices.yaml
 ```bash
 kubectl apply -f restore/es-snapshot-restore-job.yaml
 ```
+
+### +++NEW+++ Restore tasklist +++NEW+++
+
+```bash
+curl -s -X POST "localhost:9200/_snapshot/tasklist-backup/backup_tasklist_1_set_1/_restore" -H "Content-Type: application/json" -d "{
+      \"indices\": \"tasklist-import-position-8.2.0_\",
+      \"ignore_unavailable\": true,
+      \"include_global_state\": false
+    }"
+```    
+
+```bash
+curl -s -X POST "localhost:9200/_snapshot/tasklist-backup/backup_tasklist_1_set_2/_restore" -H "Content-Type: application/json" -d "{
+      \"indices\": \"tasklist-process-instance-8.3.0_,tasklist-task-8.4.0_\",
+      \"ignore_unavailable\": true,
+      \"include_global_state\": false
+    }"
+```
+
+```bash
+curl -s -X POST "localhost:9200/_snapshot/tasklist-backup/backup_tasklist_1_set_3/_restore" -H "Content-Type: application/json" -d "{
+      \"indices\": \"tasklist-task-8.4.0_*,-tasklist-task-8.4.0_\",
+      \"ignore_unavailable\": true,
+      \"include_global_state\": false
+    }"
+```
+
+```bash
+curl -s -X POST "localhost:9200/_snapshot/tasklist-backup/backup_tasklist_1_set_4/_restore" -H "Content-Type: application/json" -d "{
+      \"indices\": \"tasklist-flownode-instance-8.3.0_,tasklist-variable-8.3.0_,tasklist-draft-task-variable-8.3.0_,tasklist-task-variable-8.3.0_\",
+      \"ignore_unavailable\": true,
+      \"include_global_state\": false
+    }"
+```
+
+```bash
+curl -s -X POST "localhost:9200/_snapshot/tasklist-backup/backup_tasklist_1_set_5/_restore" -H "Content-Type: application/json" -d "{
+      \"indices\": \"tasklist-draft-task-variable-8.3.0_*,-tasklist-draft-task-variable-8.3.0_,tasklist-task-variable-8.3.0_*,-tasklist-task-variable-8.3.0_\",
+      \"ignore_unavailable\": true,
+      \"include_global_state\": false
+    }"
+```
+
+```bash
+curl -s -X POST "localhost:9200/_snapshot/tasklist-backup/backup_tasklist_1_set_6/_restore" -H "Content-Type: application/json" -d "{
+      \"indices\": \"tasklist-form-8.4.0_,tasklist-metric-8.3.0_,tasklist-migration-steps-repository-1.1.0_,tasklist-process-8.4.0_,tasklist-web-session-1.1.0_,tasklist-user-1.4.0_\",
+      \"ignore_unavailable\": true,
+      \"include_global_state\": false
+    }"
+```
+
 
 ### Restore Zeebe
 ```bash
