@@ -1,0 +1,45 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: zeebe-slo-request-failure-rate
+spec:
+  groups:
+    - name: zeebe
+      rules:
+        - alert: ZeebeSLORequestFailureRate
+          annotations:
+            summary: >-
+              Zeebe should be available and have 99 percent availability (SLA), meaning less then 1 percent failure rate.
+            description: >-
+              Zeebe's availability (SLA) is defined as 99 percent of running time Zeebe should be available, in consequence
+              we define one of our SLO as only 0.5 percent of requests should at max fail at any time.
+              The Zeebe cluster {{ $labels.namespace }} is currently hurting its SLO.
+          expr: |-
+            (
+              1 -
+              sum(
+                rate(
+                  grpc_server_handled_total{
+                    code=~"DEADLINE_EXCEEDED|UNAVAILABLE",
+                    grpc_method!="CreateProcessInstanceWithResult"
+                  }[1m]
+                )
+              ) by (namespace)
+              /
+              sum(
+                rate(
+                  grpc_server_handled_total{
+                    grpc_method!="CreateProcessInstanceWithResult"
+                  }[1m]
+                )
+              ) by (namespace)
+            )
+            * on (namespace) group_left (label_cloud_camunda_io_sales_plan_type, label_cloud_camunda_io_cluster_plan_type, label_cloud_camunda_io_cluster_plan)
+            (
+              max(kube_namespace_labels{label_cloud_camunda_io_cluster_plan!="Development_Cluster"}) by (namespace, label_cloud_camunda_io_sales_plan_type, label_cloud_camunda_io_cluster_plan_type, label_cloud_camunda_io_cluster_plan)
+            )
+            < 0.995
+          for: 1m
+          labels:
+            severity: critical
+            team: zeebe

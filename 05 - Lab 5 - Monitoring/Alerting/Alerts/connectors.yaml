@@ -1,0 +1,89 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: connectors
+spec:
+  groups:
+    - name: connectors
+      rules:
+        - alert: ConnectorsPodCrashLoopingFor20Minutes
+          annotations:
+            summary: >-
+              Connectors Pod is crash looping for more than 20 minutes
+            description: >-
+              Namespace: `{{ $labels.namespace }}` Pod: `{{ $labels.pod }}`
+
+              Connectors pod is restarting {{ printf "%.2f" $value }} times / 5 minutes.
+            aws_log_query_string: |-
+              fields @timestamp, @message, @logStream, @log
+              | filter kubernetes.namespace_name="{{ $labels.namespace }}"
+              | filter kubernetes.container_name="connectors"
+            google_log_query_string: |-
+              resource.labels.namespace_name="{{ $labels.namespace }}"
+              resource.labels.container_name="connectors"
+            alertmanager_query_string: |-
+              {namespace="{{ $labels.namespace }}",alertname="ConnectorsPodCrashLoopingFor20Minutes"}
+          expr: |-
+            rate(kube_pod_container_status_restarts_total{job="kube-state-metrics", pod=~"connectors-deployment.*"}[10m]) * 60 * 5
+            * on (namespace) group_left (label_cloud_camunda_io_sales_plan_type)
+            (
+              max(kube_namespace_labels) by (namespace, label_cloud_camunda_io_sales_plan_type)
+            )
+            > 0
+          for: 20m
+          labels:
+            severity: critical
+            team: connectors
+
+        - alert: ConnectorsJobWorkerQueueOverflowFor20Minutes
+          annotations:
+            summary: >-
+              Connectors job worker backlog is not decreasing for more than 20 minutes
+            description: >-
+              Namespace: `{{ $labels.namespace }}` Pod: `{{ $labels.pod }}`
+
+              Job worker backlog is reaching {{ $value }} for more than 20 minutes.
+              Check if jobs are progressing and if the cluster needs to be scaled up.
+            aws_log_query_string: |-
+              fields @timestamp, @message, @logStream, @log
+              | filter kubernetes.namespace_name="{{ $labels.namespace }}"
+              | filter kubernetes.container_name="connectors"
+            google_log_query_string: |-
+              resource.labels.namespace_name="{{ $labels.namespace }}"
+              resource.labels.container_name="connectors"
+            alertmanager_query_string: |-
+              {namespace="{{ $labels.namespace }}",alertname="ConnectorsJobWorkerQueueOverflowFor20Minutes"}
+          expr: |-
+            max_over_time(executor_queued_tasks{name="zeebe_client_thread_pool"}[5m])
+            * on (namespace) group_left (label_cloud_camunda_io_sales_plan_type) (max(kube_namespace_labels) by (namespace, label_cloud_camunda_io_sales_plan_type))
+            >= 40
+          for: 20m
+          labels:
+            severity: critical
+            team: connectors
+
+        - alert: ConnectorsLogsErrorsDetected
+          annotations:
+            summary: >-
+              Connectors logs are showing increasing amounts of errors
+            description: >-
+              Namespace: `{{ $labels.namespace }}` Pod: `{{ $labels.pod }}`
+
+              Connectors logs are showing {{ $value }} new error events / minute for 20 minutes.
+            aws_log_query_string: |-
+              fields @timestamp, @message, @logStream, @log
+              | filter kubernetes.namespace_name="{{ $labels.namespace }}"
+              | filter kubernetes.container_name="connectors"
+            google_log_query_string: |-
+              resource.labels.namespace_name="{{ $labels.namespace }}"
+              resource.labels.container_name="connectors"
+            alertmanager_query_string: |-
+              {namespace="{{ $labels.namespace }}",alertname="ConnectorsLogsErrorsDetected"}
+          expr: |-
+            rate(logback_events_total{job="connectors-service", level="error", logger!~"io.camunda.connector.runtime.core.outbound.ConnectorJobHandler"}[5m]) * 60
+            * on (namespace) group_left (label_cloud_camunda_io_sales_plan_type) (max(kube_namespace_labels) by (namespace, label_cloud_camunda_io_sales_plan_type))
+            > 0
+          for: 20m
+          labels:
+            severity: critical
+            team: connectors
