@@ -1,0 +1,58 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{JOB_NAME}}
+spec:
+  template:
+    spec:
+      containers:
+      - name: zeebe-restore
+        image: {{IMAGE}}
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          #!/bin/bash
+          ls -lAR /usr/local/zeebe/data
+          rm -rf /usr/local/zeebe/data/{*,.*}
+          echo "Starting restoration process..."
+          if [ -z "$(ls -A /usr/local/zeebe/data)" ]; then
+            /usr/local/zeebe/bin/restore --backupId="${ZEEBE_RESTORE_FROM_BACKUP_ID}" && echo "Restoration complete."
+          else
+            echo "ERROR: Could not delete zeebe data" >&2
+            exit 1
+          fi
+        env:
+        - name: ZEEBE_RESTORE_FROM_BACKUP_ID
+          value: "{{BACKUP_ID}}"
+        - name: ZEEBE_BROKER_DATA_BACKUP_STORE
+          value: "S3"
+        - name: ZEEBE_BROKER_DATA_BACKUP_S3_BUCKETNAME
+          value: "{{S3_BUCKETNAME}}"
+        - name: ZEEBE_BROKER_DATA_BACKUP_S3_FORCEPATHSTYLEACCESS
+          value: "true"
+        - name: ZEEBE_BROKER_DATA_BACKUP_S3_ENDPOINT
+          value: "{{S3_ENDPOINT}}"
+        - name: ZEEBE_BROKER_DATA_BACKUP_S3_ACCESSKEY
+          value: "{{S3_ACCESSKEY}}"
+        - name: ZEEBE_BROKER_DATA_BACKUP_S3_SECRETKEY
+          value: "{{S3_SECRET}}"
+        - name: ZEEBE_BROKER_DATA_BACKUP_S3_REGION
+          value: "{{S3_REGION}}"
+        - name: ZEEBE_BROKER_CLUSTER_NODEID
+          value: "{{NODEID}}"
+        - name: ZEEBE_BROKER_CLUSTER_PARTITIONSCOUNT
+          value: "{{PARTITIONCOUNT}}"
+        - name: ZEEBE_BROKER_CLUSTER_CLUSTERSIZE
+          value: "{{CLUSTERSIZE}}"
+        - name: ZEEBE_BROKER_CLUSTER_REPLICATIONFACTOR
+          value: "{{REPLICATIONFACTOR}}"
+        volumeMounts:
+        - name: data
+          mountPath: /usr/local/zeebe/data
+      securityContext:
+        fsGroup: 1000 
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: {{CLAIM_NAME}}
+      restartPolicy: OnFailure
