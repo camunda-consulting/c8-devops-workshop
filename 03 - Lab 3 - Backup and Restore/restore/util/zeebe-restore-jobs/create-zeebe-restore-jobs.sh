@@ -2,7 +2,7 @@
 
 TEMPLATE_FILE="zeebe-restore-template.yaml"
 JOB_NAME="zeebe-restore-job"
-HELM_RELEASE=""
+HELM_RELEASE="camunda"
 NAMESPACE="default"
 
 CLUSTER_SIZE=3
