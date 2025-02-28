@@ -1,5 +1,6 @@
 #!/bin/bash
 
+set -e
 TEMPLATE_FILE="zeebe-restore-template.yaml"
 JOB_NAME="zeebe-restore-job"
 HELM_RELEASE="camunda"
