@@ -1,0 +1,62 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: zeebe-behaviors
+spec:
+  groups:
+    - name: zeebe-behaviors
+      rules:
+        - alert: ZeebeExporterLag
+          annotations:
+            summary: >-
+              Zeebe exporting is lagging behind.
+            description: >-
+              {{ reReplaceAll "-zeebe$" "" .Labels.namespace }} has a large backlog of events to export from partition {{ .Labels.partition }}.
+          expr: |-
+            (
+              max by (namespace, partition) (zeebe_log_appender_last_committed_position)
+              -
+              max by (namespace, partition) (zeebe_exporter_last_exported_position)
+            )
+            * on (namespace) group_left (label_cloud_camunda_io_sales_plan_type, label_cloud_camunda_io_cluster_plan_type, label_cloud_camunda_io_channel)
+            (
+              max(kube_namespace_labels) by (namespace, label_cloud_camunda_io_sales_plan_type, label_cloud_camunda_io_cluster_plan_type, label_cloud_camunda_io_channel)
+            )
+            > 1000000
+          for: 1h
+          labels:
+            severity: |-
+              {{- if eq "Stable" $labels.label_cloud_camunda_io_channel -}}
+                page
+              {{- else -}}
+                critical
+              {{- end -}}
+            team: zeebe
+
+        - alert: ZeebeLoopsInTasks
+          annotations:
+            summary: >-
+              Zeebe is running a straight-through task loop
+            description: >-
+              Manual and undefined Tasks can be processed immediately by Zeebe. When modeling a
+              loop in a process model Zeebe will run into a endless loop and produce endless
+              data, which will cause outages at some point. The Zeebe pod {{ $labels.namespace }}/{{ $labels.pod }}
+              runs {{ printf "%.2f" $value }} tasks per second.
+          expr: |-
+            max(
+              rate(
+                zeebe_element_instance_events_total{
+                  action="completed",
+                  type=~"TASK|MANUAL_TASK"
+                }[5m]
+              )
+            ) by (type, action, namespace)
+            * on (namespace) group_left (label_cloud_camunda_io_sales_plan_type, label_cloud_camunda_io_cluster_plan_type)
+            (
+              max(kube_namespace_labels) by (namespace, label_cloud_camunda_io_sales_plan_type, label_cloud_camunda_io_cluster_plan_type)
+            )
+            > 10
+          for: 5m
+          labels:
+            severity: critical
+            team: zeebe

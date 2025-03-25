@@ -1,0 +1,38 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: operate
+spec:
+  groups:
+    - name: operate
+      interval: 1m
+      rules:
+        - alert: OperateDeploymentPodAvailabilityLow
+          annotations:
+            summary: >
+              Average availability of pods in the last 20 minutes has been low.
+            description: >
+              {{ $value | humanizePercentage }} available for `{{ $labels.deployment }}` in namespace `{{ $labels.namespace }}`
+          expr: |-
+            namespace_deployment:kube_deployment_status_replicas_available_per_kube_deployment_spec_replicas:avg5m_clamp_max_ratio{
+              deployment=~"operate-deployment-.*"
+            }
+            < 0.5
+          for: 20m
+          labels:
+            severity: critical
+        - alert: OperateImportLaggingBehindZeebe
+          annotations:
+            summary: >
+              Import delay in last 4 hours was bigger than 30 minutes.
+            description: >
+              {{ $value | humanizeDuration }} average delay in namespace `{{ $labels.namespace }}`
+          expr: |-
+            sum(rate(operate_import_time_seconds_sum[2m])) by (namespace)
+            /
+            sum(rate(operate_import_time_seconds_count[2m])) by (namespace)
+            > 1800
+          for: 4h
+          labels:
+            severity: warning
+            team: operate
