@@ -41,4 +41,4 @@ elasticsearch:
   image:
     tag: 8.17.4
   master:
-    replicaCount: 1
+    replicaCount: 2
