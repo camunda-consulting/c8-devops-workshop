@@ -4,8 +4,6 @@ global:
       # Disable the Identity authentication for local development
       # it will fall back to basic-auth: demo/demo as default user
       enabled: false
-  image:
-    tag: 8.7.0
 
 operate:
   enabled: true
