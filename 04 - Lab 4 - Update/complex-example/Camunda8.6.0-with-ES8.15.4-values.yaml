@@ -1,0 +1,42 @@
+global:
+  identity:
+    auth:
+      # Disable the Identity authentication for local development
+      # it will fall back to basic-auth: demo/demo as default user
+      enabled: false
+
+operate:
+  enabled: true
+
+tasklist:
+  enabled: true
+
+optimize:
+  enabled: false
+
+connectors:
+  enabled: false
+
+identity:
+  enabled: false
+
+identityKeycloak:
+  enabled: false
+
+postgresql:
+  enabled: false
+
+zeebeGateway:
+  replicas: 1
+
+zeebe:
+  clusterSize: 1
+  partitionCount: 1
+  replicationFactor: 1
+  pvcSize: 10Gi
+
+elasticsearch:
+  image:
+    tag: 8.15.4
+  master:
+    replicaCount: 2

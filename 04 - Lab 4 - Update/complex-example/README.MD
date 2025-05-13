@@ -122,9 +122,27 @@ Docs: https://docs.camunda.io/docs/self-managed/setup/upgrade/#from-camunda-84-t
 
 
 ```bash
-helm upgrade -f ./Camunda8.5.0-with-ES8.13.0-values.yaml  camunda camunda/camunda-platform --version 10.0.2
+helm upgrade -f ./Camunda8.5.0-with-ES8.13.0-values.yaml  camunda camunda/camunda-platform --version 10.6.0
 ```
 
+# Upgrade Camunda 8.5.0 to 8.6.
+Docs: https://docs.camunda.io/docs/self-managed/operational-guides/update-guide/850-to-860/
+Docs: https://docs.camunda.io/docs/self-managed/setup/upgrade/?upgrades=8.6
+
+
+```bash
+helm upgrade -f ./Camunda8.6.0-with-ES8.15.4-values.yaml  camunda camunda/camunda-platform --version 11.3.1
+```
+
+
+# Upgrade Camunda 8.6.0 to 8.7.
+Docs: https://docs.camunda.io/docs/self-managed/operational-guides/update-guide/860-to-870/
+Docs: https://docs.camunda.io/docs/self-managed/setup/upgrade/?upgrades=8.7
+
+
+```bash
+helm upgrade -f ./Camunda8.7.0-with-ES8.17.1-values.yaml  camunda camunda/camunda-platform --version 12.0.1
+```
 
 # Verification
 ## Operate still shows correct data (verifies Operate/Elasticsearch data is correct)  
