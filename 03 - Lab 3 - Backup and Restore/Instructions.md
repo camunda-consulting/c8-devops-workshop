@@ -1,5 +1,13 @@
 # Trigger Backup and Restore
 
+## Apply shared script config
+
+We will use a shared script config.
+
+```bash
+kubectl apply -f ./script-config.yaml
+```
+
 ## Create Demo Environment
 
 ### Create Minio
@@ -27,7 +35,7 @@ kubectl apply -f ./es-snapshot-minio-job.yaml
 ```
 
 ```bash
-kubectl logs -f $(kubectl get pods --selector=job-name=es-snapshot-minio-job --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
+kubectl logs -f $(kubectl get pods --selector=job-name=camunda-es-snapshot-minio-job --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
 ```
 
 When it is complete, you can delete the job:
@@ -40,6 +48,7 @@ kubectl delete -f ./es-snapshot-minio-job.yaml
 
 ```bash
 kubectl create configmap models --from-file=CamundaProcess.bpmn=./backup/BenchmarkProcess.bpmn
+kubectl label configmap models type=camunda-backup-restore
 ```
 
 ```bash
@@ -47,17 +56,16 @@ kubectl apply -f ./backup/zbctl-deploy-job.yaml
 ```
 
 ```bash
-kubectl logs -f $(kubectl get pods --selector=job-name=zbctl-deploy --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
+kubectl logs -f $(kubectl get pods --selector=job-name=camunda-zbctl-deploy --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
 ```
 
 ```bash
 kubectl create configmap payload --from-file=./backup/payload.json
+kubectl label configmap payload type=camunda-backup-restore
 ```
 
 ```bash
-kubectl apply -f ./backup/benchmark.yaml
-sleep 30
-kubectl delete -f ./backup/benchmark.yaml
+kubectl apply -f ./backup/benchmark.yaml && sleep 30 && kubectl delete -f ./backup/benchmark.yaml
 ```
 
 ### Review Current State
@@ -71,7 +79,7 @@ kubectl apply -f ./backup/create-backup.yaml
 ```
 
 ```bash
-kubectl logs -f $(kubectl get pods --selector=job-name=create-backup --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
+kubectl logs -f $(kubectl get pods --selector=job-name=camunda-create-backup --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
 ```
 
 As soon as the backup is complete, you can delete the job
@@ -131,12 +139,16 @@ kubectl apply -f ./restore/find-backup.yaml
 ```
 
 ```bash
-kubectl logs -f $(kubectl get pods --selector=job-name=find-backup --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
+kubectl logs -f $(kubectl get pods --selector=job-name=camunda-find-backup --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
 ```
 
-Take note of the backup id(s).
+Set the backup id you want to restore from to the `scamunda-script-config` and apply it again:
 
-When it is complete, you can delete the job:
+```bash
+kubectl apply -f ./script-config.yaml
+```
+
+When this is done, you can delete the job:
 
 ```bash
 kubectl delete -f ./restore/find-backup.yaml

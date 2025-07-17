@@ -11,3 +11,4 @@ data:
   MINIO_ENDPOINT: http://minio:9000  # Use the MinIO
   MINIO_BUCKET: camunda  # Name of the MinIO bucket for storing backups
   SNAPSHOT_REPOSITORIES: "operate-backup optimize-backup tasklist-backup zeebe-records-backup"  # space-separated list of snapshot repositories
+  BACKUP_ID: ""  # backup ID, please adjust to the one you want to restore

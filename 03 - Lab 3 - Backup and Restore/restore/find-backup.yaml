@@ -20,7 +20,5 @@ spec:
           #!/bin/sh
           set -e
 
-          GATEWAY_MANAGEMENT_API="http://$CAMUNDA_RELEASE_NAME-zeebe-gateway:9600"
-
-          curl --fail "$GATEWAY_MANAGEMENT_API/actuator/backups" | jq '.[].backupId' 
+          curl --fail "http://$CAMUNDA_RELEASE_NAME-zeebe-gateway:9600/actuator/backups" | jq 'sort_by(.backupId) | .[] | select(.state == "COMPLETED") | .backupId'
       restartPolicy: OnFailure

@@ -13,28 +13,19 @@ spec:
         envFrom:
         - configMapRef:
             name: camunda-script-config
-        env:
-          - name: BACKUP_ID
-            value: "1752670937"  # Set this to the specific BACKUP_ID you want to restore
         command: ["/bin/sh"]
         args:
         - -c
         - |
           #!/bin/sh
           set -eo pipefail
-
-          # Define Elasticsearch endpoint
-          elasticsearch_endpoint=$ELASTIC_ENDPOINT
-          
-          # Define the list of repository names
-          repositories=$SNAPSHOT_REPOSITORIES
           
           # Loop over each repository
-          for repository in $repositories; do
+          for repository in $SNAPSHOT_REPOSITORIES; do
             echo "Processing repository: $repository"
             
             # Query Elasticsearch for all snapshots in the repository
-            response=$(curl --fail -s "$elasticsearch_endpoint/_snapshot/$repository/_all")
+            response=$(curl --fail -s "$ELASTIC_ENDPOINT/_snapshot/$repository/_all")
 
             # Attempt to extract snapshot names that include the BACKUP_ID. This uses a simplistic method with grep and cut.
             # Note: This method relies on the snapshot names being in a specific format in the response.
@@ -43,7 +34,7 @@ spec:
                 echo "Found snapshot matching criteria: $snapshot in $repository"
                 # Restore the found snapshot
                 echo "Restoring snapshot: $snapshot in repository: $repository"
-                curl --fail --request POST "$elasticsearch_endpoint/_snapshot/$repository/$snapshot/_restore?wait_for_completion=true"
+                curl --fail --request POST "$ELASTIC_ENDPOINT/_snapshot/$repository/$snapshot/_restore?wait_for_completion=true"
                 echo "Restore completed for snapshot: $snapshot in repository: $repository"
               else
                 echo "ERROR: No matching snapshots found in repository $repository." >&2
