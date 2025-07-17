@@ -5,27 +5,35 @@
 ### Create Minio
 
 ```bash
-helm install minio oci://registry-1.docker.io/bitnamicharts/minio -f minio-values.yaml
+helm install minio oci://registry-1.docker.io/bitnamicharts/minio -f ./minio-values.yaml
 ```
 
 ### Install Camunda
 
 ```bash
-helm install camunda camunda/camunda-platform -f camunda-values.yaml --version 10.4.0
+helm install camunda camunda/camunda-platform -f ./camunda-values.yaml
 ```
 
 ### Wait for ES to be ready
+
 ```bash
 kubectl rollout status sts/camunda-elasticsearch-master
 ```
 
 ### Register Snapshot Repositories
+
 ```bash
-kubectl apply -f es-snapshot-minio-job.yaml
+kubectl apply -f ./es-snapshot-minio-job.yaml
 ```
 
 ```bash
 kubectl logs -f $(kubectl get pods --selector=job-name=es-snapshot-minio-job --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
+```
+
+When it is complete, you can delete the job:
+
+```bash
+kubectl delete -f ./es-snapshot-minio-job.yaml
 ```
 
 ### Generate Data
@@ -52,54 +60,24 @@ sleep 30
 kubectl delete -f ./backup/benchmark.yaml
 ```
 
-
 ### Review Current State
 
 ![Screenshot Operate](images/operate-overview.png)
 
 ## Perform Backup
-### Generate BackupId
-```bash
-./backup/create-backupId-as-secret.sh
-```
-
-### Trigger Backup for Operate, Tasklist and Optimize
 
 ```bash
-kubectl apply -f ./backup/camunda-backup-job.yaml
+kubectl apply -f ./backup/create-backup.yaml
 ```
 
 ```bash
-kubectl logs -f $(kubectl get pods --selector=job-name=camunda-backup-job --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
-```
-### Pause Exporting
-
-```bash
-kubectl apply -f ./backup/zeebe-export-pause.yaml
+kubectl logs -f $(kubectl get pods --selector=job-name=create-backup --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
 ```
 
-### Backup of Zeebe Records in ES
-```bash
-kubectl apply -f ./backup/es-create-snapshot-zeebe.yaml
-```
+As soon as the backup is complete, you can delete the job
 
 ```bash
-kubectl logs -f $(kubectl get pods --selector=job-name=es-create-snapshot-zeebe --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
-```
-
-### Zeebe Backup
-```bash
-kubectl apply -f ./backup/zeebe-backup-job.yaml
-```
-
-```bash
-kubectl logs -f $(kubectl get pods --selector=job-name=zeebe-backup-job --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
-```
-
-### (Optional not required for the Demo) Resume Exporting
-
-```bash
-kubectl apply -f ./backup/zeebe-export-resume.yaml
+kubectl delete -f ./backup/create-backup.yaml
 ```
 
 ## Simulate Data Loss
@@ -113,10 +91,11 @@ kubectl delete pvc data-camunda-elasticsearch-master-0 data-camunda-elasticsearc
 ```
 
 ## Restore
+
 ### Create New Camunda Cluster
 
 ```bash
-helm install camunda camunda/camunda-platform -f camunda-values.yaml --version 10.4.0
+helm install camunda camunda/camunda-platform -f ./camunda-values.yaml
 ```
 
 ```bash
@@ -125,116 +104,102 @@ kubectl rollout status deploy/camunda-operate
 
 Why? Templates and Aliases are created again.
 
-### Verify that Templates are generated.
+### Verify that Templates are generated
 
 ![Templates](images/kibana-templates.png)
 
-### Scale Down Zeebe & Webapps.
+### Register ES Repositories again
+
 ```bash
-kubectl scale sts/camunda-zeebe --replicas=0
-kubectl scale deploy/camunda-zeebe-gateway --replicas=0
-kubectl scale deploy/camunda-operate --replicas=0
-kubectl scale deploy/camunda-tasklist --replicas=0
-kubectl scale deploy/camunda-optimize --replicas=0
+kubectl apply -f ./es-snapshot-minio-job.yaml
 ```
 
-### Register ES Repositories again
 ```bash
-kubectl delete -f es-snapshot-minio-job.yaml
-kubectl apply -f es-snapshot-minio-job.yaml
+kubectl logs -f $(kubectl get pods --selector=job-name=es-snapshot-minio-job --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
 ```
-### Delete all Indices
+
+When it is complete, you can delete the job:
+
 ```bash
-kubectl apply -f restore/es-delete-all-indices.yaml
+kubectl delete -f ./es-snapshot-minio-job.yaml
+```
+
+### Find a backup to restore from
+
+```bash
+kubectl apply -f ./restore/find-backup.yaml
+```
+
+```bash
+kubectl logs -f $(kubectl get pods --selector=job-name=find-backup --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
+```
+
+Take note of the backup id(s).
+
+When it is complete, you can delete the job:
+
+```bash
+kubectl delete -f ./restore/find-backup.yaml
+```
+
+### Disable Zeebe & Webapps
+
+```bash
+helm upgrade camunda camunda/camunda-platform -f ./camunda-values.yaml -f ./restore/camunda-index-restore.yaml
+```
+
+### Delete all Indices
+
+```bash
+kubectl apply -f ./restore/es-delete-all-indices.yaml
 ```
 
 ### Restore Snapshots
+
 ```bash
-kubectl apply -f restore/es-snapshot-restore-job.yaml
+kubectl apply -f ./restore/es-snapshot-restore-job.yaml
+```
+
+### Delete Zeebe disk
+
+```bash
+kubectl delete $(kubectl get pvc -o name | grep zeebe)
 ```
 
 ### Restore Zeebe
-```bash
-kubectl apply -f restore/zeebe-restore-job-0.yaml
-```
 
 ```bash
-kubectl logs -f $(kubectl get pods --selector=job-name=zeebe-restore-job-0 --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
+helm upgrade camunda camunda/camunda-platform -f ./camunda-values.yaml -f ./restore/camunda-zeebe-restore.yaml
 ```
 
-```bash
-kubectl apply -f restore/zeebe-restore-job-1.yaml
-```
+### Return to normal platform state
 
 ```bash
-kubectl logs -f $(kubectl get pods --selector=job-name=zeebe-restore-job-1 --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
+helm upgrade camunda camunda/camunda-platform -f ./camunda-values.yaml
 ```
 
-```bash
-kubectl apply -f restore/zeebe-restore-job-2.yaml
-```
+## Validate Restore
 
-```bash
-kubectl logs -f $(kubectl get pods --selector=job-name=zeebe-restore-job-2 --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
-```
-
-```bash
-kubectl delete jobs zeebe-restore-job-0 zeebe-restore-job-1 zeebe-restore-job-2
-```
-
-### Scale up Zeebe again
-```bash
-kubectl scale sts/camunda-zeebe --replicas=3
-```
-
-```bash
-kubectl rollout status sts/camunda-zeebe
-```
-
-```bash
-kubectl scale deploy/camunda-zeebe-gateway --replicas=1
-```
-
-```bash
-kubectl port-forward svc/camunda-zeebe-gateway 26500
-```
-
-```bash
-zbctl status --insecure
-```
-
-### Scale up Operate again
-```bash
-kubectl scale deploy/camunda-operate --replicas=1
-```
-### Scale up Tasklist again
-```bash
-kubectl scale deploy/camunda-tasklist --replicas=1
-```
-### Scale up Optimize again
-```bash
-kubectl scale deploy/camunda-optimize --replicas=1
-```
-
-# Validate Restore
-
-## Operate:
+### Operate
 
 ![Screenshot Operate](images/operate-overview.png)
 
-## Zeebe:
-### Find an active Instance
+### Zeebe
+
+#### Find an active Instance
 
 ![Active Instance Operate](images/active-instance-operate.png)
 
-### Cancel it via Operate UI
+#### Cancel it via Operate UI
 
 ![Cancel Instance Operate](images/cancel-instance-operate1.png)
 
-### Validate Cancellation
+#### Validate Cancellation
+
 ![Active Instance Operate](images/cancel-instance-operate2.png)
 
-# Cleanup
+## Cleanup
+
 ```bash
 helm uninstall camunda
 ```
@@ -244,8 +209,9 @@ helm uninstall minio
 ```
 
 ```bash
-kubectl delete jobs $(kubectl get jobs --no-headers -o custom-columns=":metadata.name,:status.conditions[?(@.type=='Complete')].status" | grep True | cut -d" " -f1)
+kubectl delete all -l type=camunda-backup-restore
 ```
+
 ```bash
-kubectl delete pvc data-camunda-elasticsearch-master-0 data-camunda-elasticsearch-master-1 data-camunda-postgresql-0 data-camunda-zeebe-0 data-camunda-zeebe-1 data-camunda-zeebe-2 minio
+kubectl delete pvc -l app.kubernetes.io/instance=camunda
 ```

@@ -1,0 +1,26 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: camunda-find-backup
+  labels:
+    type: camunda-backup-restore
+spec:
+  template:
+    spec:
+      containers:
+      - name: find-backup
+        image: mbentley/swissarmy
+        envFrom:
+        - configMapRef:
+            name: camunda-script-config
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          #!/bin/sh
+          set -e
+
+          GATEWAY_MANAGEMENT_API="http://$CAMUNDA_RELEASE_NAME-zeebe-gateway:9600"
+
+          curl --fail "$GATEWAY_MANAGEMENT_API/actuator/backups" | jq '.[].backupId' 
+      restartPolicy: OnFailure

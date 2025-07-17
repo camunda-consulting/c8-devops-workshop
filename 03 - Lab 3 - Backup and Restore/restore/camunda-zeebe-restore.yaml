@@ -1,0 +1,20 @@
+zeebe:
+   enabled: true
+   env:
+   # Environment variables to overwrite the Zeebe startup behavior
+   - name: ZEEBE_RESTORE
+     value: "true"
+   - name: ZEEBE_RESTORE_FROM_BACKUP_ID
+     value: "1752670937" # Change the $BACKUP_ID to your actual value
+   - name: SPRING_PROFILES_INCLUDE
+     value: "backup"
+connectors:
+   enabled: false
+optimize:
+   enabled: false
+operate:
+   enabled: false
+tasklist:
+   enabled: false
+zeebeGateway:
+   enabled: false

@@ -1,7 +1,9 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: zbctl-deploy
+  name: camunda-zbctl-deploy
+  labels:
+    type: camunda-backup-restore
 spec:
   template:
     spec:

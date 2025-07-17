@@ -2,4 +2,4 @@ auth:
   rootUser: minioadmin
   rootPassword: minioadmin
 
-defaultBuckets: zeebe-backup,operate-backup,tasklist-backup,optimize-backup
+defaultBuckets: camunda

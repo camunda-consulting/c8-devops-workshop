@@ -1,6 +1,3 @@
-identity:
-  enabled: true
-
 connectors:
   enabled: false
 
@@ -27,20 +24,24 @@ zeebe-gateway:
 # Backup
 zeebe:
   env:
-  - name: ZEEBE_BROKER_DATA_BACKUP_STORE
-    value: "S3"
-  - name: ZEEBE_BROKER_DATA_BACKUP_S3_BUCKETNAME
-    value: "zeebe-backup"
-  - name: ZEEBE_BROKER_DATA_BACKUP_S3_FORCEPATHSTYLEACCESS
-    value: "true"
-  - name: ZEEBE_BROKER_DATA_BACKUP_S3_ENDPOINT
-    value: "http://minio:9000"
-  - name: ZEEBE_BROKER_DATA_BACKUP_S3_ACCESSKEY
-    value: "minioadmin"
-  - name: ZEEBE_BROKER_DATA_BACKUP_S3_SECRETKEY
-    value: "minioadmin"
-  - name: ZEEBE_BROKER_DATA_BACKUP_S3_REGION
-    value: "us-east-1"
+  - name: SPRING_PROFILES_INCLUDE
+    value: "backup"
+  extraConfiguration:
+    application-backup.yaml: |
+      zeebe:
+        broker:
+          data:
+            backup:
+              enabled: true
+              store: S3
+              s3:
+                bucketName: camunda
+                forcePathStyleAccess: true
+                endpoint: http://minio:9000
+                accessKey: minioadmin
+                secretKey: minioadmin
+                region: us-east-1
+                basePath: zeebe
 
 elasticsearch:
   global:
@@ -48,11 +49,6 @@ elasticsearch:
   kibana:
     readinessProbe:
       enabled: false
-  # Workaround for https://github.com/bitnami/charts/issues/27607
-  extraVolumeMounts:
-    - name: empty-dir
-      mountPath: /bitnami/elasticsearch
-      subPath: app-volume-dir
   initScripts:
     init-keystore.sh: |
       #!/bin/bash
