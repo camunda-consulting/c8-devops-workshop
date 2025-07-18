@@ -1,7 +1,9 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: pvc-inspector
+  name: camunda-pvc-inspector
+  labels:
+    type: camunda-backup-restore
 spec:
   containers:
   - name: ubuntu

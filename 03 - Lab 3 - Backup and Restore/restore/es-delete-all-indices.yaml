@@ -1,20 +1,27 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: es-delete-all-indices-job
+  name: camunda-es-delete-all-indices-job
+  labels:
+    type: camunda-backup-restore
 spec:
   template:
     spec:
       containers:
       - name: delete-indices
         image: curlimages/curl
+        envFrom:
+        - configMapRef:
+            name: camunda-script-config  # Reference to the ConfigMap containing environment variables
+        # Define the command to delete all non-system indices in Elasticsearch
+        # This job will delete all indices except those starting with a dot (.)
         command: ["/bin/sh", "-c"]
         args:
         - |
           #!/bin/sh
           set -eo pipefail
           # Define Elasticsearch endpoint
-          elasticsearch_endpoint="http://camunda-elasticsearch:9200"
+          elasticsearch_endpoint=$ELASTIC_ENDPOINT
           
           # List all non-system indices (excluding those starting with .)
           indices=$(curl --fail -s "$elasticsearch_endpoint/_cat/indices?h=index" | grep -v '^\.')

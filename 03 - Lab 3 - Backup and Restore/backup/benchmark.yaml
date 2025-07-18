@@ -5,6 +5,7 @@ metadata:
   name: benchmark
   labels:
     app: benchmark
+    type: camunda-backup-restore
 spec:
   selector:
     matchLabels:

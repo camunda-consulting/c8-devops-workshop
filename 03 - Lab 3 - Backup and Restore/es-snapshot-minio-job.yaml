@@ -1,13 +1,18 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: es-snapshot-minio-job
+  name: camunda-es-snapshot-minio-job
+  labels:
+    type: camunda-backup-restore
 spec:
   template:
     spec:
       containers:
       - name: es-snapshot
         image: curlimages/curl
+        envFrom:
+        - configMapRef:
+            name: camunda-script-config
         command: ["/bin/sh"]
         args:
         - -c
@@ -15,15 +20,18 @@ spec:
           #!/bin/sh
           set -e
 
-          # Define bucket names
-          buckets="operate-backup optimize-backup tasklist-backup zeebe-backup"
+          # Define base paths
+          basePaths=$SNAPSHOT_REPOSITORIES
           
+          # Define bucket name
+          bucket=$MINIO_BUCKET
+
           # MinIO specific settings
-          endpoint="http://minio:9000" # Use the MinIO service URL as the endpoint
+          endpoint=$MINIO_ENDPOINT
 
           # Iterate over each bucket name to register it as a snapshot repository without specifying access and secret keys
-          for bucket in $buckets; do
-            curl --fail -X PUT "http://camunda-elasticsearch:9200/_snapshot/$bucket" -H 'Content-Type: application/json' -d '
+          for basePath in $basePaths; do
+            curl --fail -X PUT "http://$ELASTIC_ENDPOINT/_snapshot/$basePath" -H 'Content-Type: application/json' -d '
             {
               "type": "s3",
               "settings": {
@@ -32,9 +40,10 @@ spec:
                 "protocol": "http",
                 "compress": true,
                 "client": "default",
-                "path_style_access": true
+                "path_style_access": true,
+                "base_path": "'"$basePath"'"
               }
             }'
-            echo "Repository $bucket registered with MinIO using keystore credentials."
+            echo "Repository $basePath registered with MinIO using keystore credentials."
           done
       restartPolicy: OnFailure

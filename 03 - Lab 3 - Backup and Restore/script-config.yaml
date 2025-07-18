@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: camunda-script-config
+  labels:
+    type: camunda-backup-restore
+data:
+  CAMUNDA_RELEASE_NAME: camunda  # Name of your Camunda release, replace with your actual release name
+  ELASTIC_ENDPOINT: camunda-elasticsearch:9200  # Elasticsearch endpoint, replace with your actual service name
+  ELASTIC_ZEEBE_RECORDS_SNAPSHOT_REPOSITORY: zeebe-records-backup  # Name of the snapshot repository for zeebe record backups
+  MINIO_ENDPOINT: http://minio:9000  # Use the MinIO
+  MINIO_BUCKET: camunda  # Name of the MinIO bucket for storing backups
+  SNAPSHOT_REPOSITORIES: "operate-backup optimize-backup tasklist-backup zeebe-records-backup"  # space-separated list of snapshot repositories
+  BACKUP_ID: ""  # backup ID, please adjust to the one you want to restore
