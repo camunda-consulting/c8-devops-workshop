@@ -1,0 +1,179 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: camunda-platform
+  namespace: default
+  labels:
+    service: camunda8
+    category: camunda-platform
+    release: prometheus
+spec:
+  groups:
+    - name: camunda-platform
+      rules:
+        - alert: CamundaZeebeUnhealthy
+          expr: zeebe_health != 1
+          for: 5m
+          labels:
+            service: camunda8
+            category: camunda-platform
+            severity: critical
+            priority: P1
+          annotations:
+            summary: Zeebe health is not OK
+            description: zeebe_health != 1 for at least 5 minutes.
+
+        - alert: CamundaExporterStateNotExporting
+          expr: zeebe_exporter_state != 0
+          for: 5m
+          labels:
+            service: camunda8
+            category: camunda-platform
+            severity: high
+            priority: P2
+          annotations:
+            summary: Zeebe exporter state is not Exporting
+            description: zeebe_exporter_state != 0 for at least 5 minutes.
+
+        - alert: CamundaElasticsearchActiveShardsLow
+          expr: (elasticsearch_cluster_health_active_shards) / (elasticsearch_cluster_health_number_of_data_nodes * 1000) < 0.7
+          labels:
+            service: camunda8
+            category: camunda-platform
+            severity: high
+            priority: P2
+          annotations:
+            summary: Elasticsearch active shards below 70%
+            description: Active shards per expected capacity < 70%.
+
+        - alert: CamundaStreamProcessorLatencyP95High
+          expr: |
+            histogram_quantile(
+              0.95,
+              sum(rate(zeebe_stream_processor_latency_bucket[5m])) by (pod, le)
+            ) > 1
+          for: 5m
+          labels:
+            service: camunda8
+            category: camunda-platform
+            severity: high
+            priority: P2
+          annotations:
+            summary: Zeebe stream processor p95 latency high (>1s)
+            description: 95th percentile stream processor latency exceeded 1s for 5 minutes.
+
+        - alert: CamundaConnectorsJobWorkerBacklog
+          expr: max_over_time(executor_queued_tasks{name="zeebe_client_thread_pool"}[5m]) >= 40
+          for: 20m
+          labels:
+            service: camunda8
+            category: camunda-platform
+            severity: medium
+            priority: P3
+          annotations:
+            summary: Connectors job worker backlog high
+            description: executor_queued_tasks for Zeebe client thread pool >= 40 for 20m.
+
+        - alert: CamundaOperateImportLagging
+          expr: (rate(operate_import_time_seconds_sum[5m]) / rate(operate_import_time_seconds_count[5m])) > 900
+          for: 30m
+          labels:
+            service: camunda8
+            category: camunda-platform
+            severity: high
+            priority: P2
+          annotations:
+            summary: Operate import lagging behind
+            description: Operate average import time > 900s (15m) for 30 minutes.
+
+        - alert: CamundaTasklistImportLagging
+          expr: (rate(tasklist_import_time_seconds_sum[5m]) / rate(tasklist_import_time_seconds_count[5m])) > 900
+          for: 1h
+          labels:
+            service: camunda8
+            category: camunda-platform
+            severity: high
+            priority: P2
+          annotations:
+            summary: Tasklist import lagging behind
+            description: Tasklist average import time > 900s (15m) for 1 hour.
+
+        - alert: CamundaOptimizeImportLagging
+          expr: (rate(optimize_import_overallImportTime_seconds_sum[5m]) / rate(optimize_import_overallImportTime_seconds_count[5m])) > 900
+          for: 1h
+          labels:
+            service: camunda8
+            category: camunda-platform
+            severity: high
+            priority: P2
+          annotations:
+            summary: Optimize import lagging behind
+            description: Optimize average import time > 900s (15m) for 1 hour.
+
+        - alert: CamundaZeebeExporterLagging
+          expr: (max by (namespace, partition) (zeebe_log_appender_last_committed_position) - max by (namespace, partition) (zeebe_exporter_last_exported_position)) > 1000000
+          for: 1h
+          labels:
+            service: camunda8
+            category: camunda-platform
+            severity: high
+            priority: P2
+          annotations:
+            summary: Zeebe exporter lagging behind
+            description: Exporter is > 1,000,000 positions behind for at least 1 hour.
+
+        - alert: CamundaUnbalancedCluster
+          expr: |
+            abs(
+              sum by (pod) (atomix_role == bool 3)
+              -
+              (
+                scalar(count(count by (partition) (atomix_role)))
+                /
+                scalar(count(count by (pod) (atomix_role)))
+              )
+            ) > 1
+          for: 1h
+          labels:
+            service: camunda8
+            category: camunda-platform
+            severity: medium
+            priority: P3
+          annotations:
+            summary: Zeebe cluster leadership is unbalanced
+            description: Number of leaderships per pod deviates by >1 for 1h.
+
+        - alert: CamundaBackupFailed
+          expr: increase(zeebe_backup_operations_total{operation="take", result="failed"}[60m]) > 0
+          labels:
+            service: camunda8
+            category: camunda-platform
+            severity: high
+            priority: P2
+          annotations:
+            summary: Zeebe backup operation failed
+            description: One or more backups failed in the last 60 minutes.
+
+        - alert: CamundaElasticsearchUnhealthyYellow
+          expr: max(elasticsearch_cluster_health_status{color="yellow"}) > 0
+          for: 5m
+          labels:
+            service: camunda8
+            category: camunda-platform
+            severity: medium
+            priority: P3
+          annotations:
+            summary: Elasticsearch cluster health is yellow
+            description: Elasticsearch reports yellow health for at least 5 minutes.
+
+        - alert: CamundaElasticsearchUnhealthyRed
+          expr: max(elasticsearch_cluster_health_status{color="red"}) > 0
+          for: 1m
+          labels:
+            service: camunda8
+            category: camunda-platform
+            severity: critical
+            priority: P1
+          annotations:
+            summary: Elasticsearch cluster health is red
+            description: Elasticsearch reports red health for at least 1 minute.

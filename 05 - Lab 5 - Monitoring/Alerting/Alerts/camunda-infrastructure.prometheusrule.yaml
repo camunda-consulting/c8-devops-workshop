@@ -1,0 +1,117 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: camunda-infrastructure
+  namespace: default
+  labels:
+    service: camunda8
+    category: infrastructure
+    release: prometheus
+spec:
+  groups:
+    - name: camunda-infrastructure
+      rules:
+        - alert: PodRestartBurst
+          expr: sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total[5m])) > 5
+          labels:
+            service: camunda8
+            category: infrastructure
+            severity: critical
+            priority: P1
+          annotations:
+            summary: Pod restart burst detected
+            description: More than 5 container restarts within 5 minutes for a pod.
+
+        - alert: PodCPUNearOrExceedingLimit
+          expr: |
+            sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{container!="",pod!=""}[5m]))
+              > 0.9
+              * sum by (namespace, pod) (kube_pod_container_resource_limits{resource="cpu", unit="core", container!=""})
+          for: 30m
+          labels:
+            service: camunda8
+            category: infrastructure
+            severity: medium
+            priority: P3
+          annotations:
+            summary: Pod CPU near/exceeding limit
+            description: Pod CPU usage > 90% of CPU limit for 30 minutes.
+
+        - alert: PodMemoryNearOrExceedingLimit
+          expr: |
+            sum by (namespace, pod) (container_memory_working_set_bytes{container!="",pod!=""})
+              > 0.85
+              * sum by (namespace, pod) (kube_pod_container_resource_limits{resource="memory", unit="byte", container!=""})
+          for: 60m
+          labels:
+            service: camunda8
+            category: infrastructure
+            severity: medium
+            priority: P3
+          annotations:
+            summary: Pod memory near/exceeding limit
+            description: Pod working set > 85% of memory limit for 60 minutes.
+
+        - alert: ZeebePVCCapacity80Percent
+          expr: |
+            (
+              sum by (namespace, persistentvolumeclaim) (kubelet_volume_stats_used_bytes{persistentvolumeclaim=~".*zeebe.*"})
+              /
+              sum by (namespace, persistentvolumeclaim) (kubelet_volume_stats_capacity_bytes{persistentvolumeclaim=~".*zeebe.*"})
+            ) > 0.8
+          labels:
+            service: camunda8
+            category: infrastructure
+            severity: high
+            priority: P2
+          annotations:
+            summary: Zeebe PVC capacity ≥ 80%
+            description: Zeebe PVC usage exceeds 80% of capacity.
+
+        - alert: ZeebePVCCapacity95Percent
+          expr: |
+            (
+              sum by (namespace, persistentvolumeclaim) (kubelet_volume_stats_used_bytes{persistentvolumeclaim=~".*zeebe.*"})
+              /
+              sum by (namespace, persistentvolumeclaim) (kubelet_volume_stats_capacity_bytes{persistentvolumeclaim=~".*zeebe.*"})
+            ) > 0.95
+          labels:
+            service: camunda8
+            category: infrastructure
+            severity: critical
+            priority: P1
+          annotations:
+            summary: Zeebe PVC capacity ≥ 95%
+            description: Zeebe PVC usage exceeds 95% of capacity.
+
+        - alert: ElasticsearchPVCCapacity80Percent
+          expr: |
+            (
+              sum by (namespace, persistentvolumeclaim) (kubelet_volume_stats_used_bytes{persistentvolumeclaim=~".*elasticsearch.*"})
+              /
+              sum by (namespace, persistentvolumeclaim) (kubelet_volume_stats_capacity_bytes{persistentvolumeclaim=~".*elasticsearch.*"})
+            ) > 0.8
+          labels:
+            service: camunda8
+            category: infrastructure
+            severity: high
+            priority: P2
+          annotations:
+            summary: Elasticsearch PVC capacity ≥ 80%
+            description: Elasticsearch PVC usage exceeds 80% of capacity.
+
+        - alert: ElasticsearchPVCCapacity95Percent
+          expr: |
+            (
+              sum by (namespace, persistentvolumeclaim) (kubelet_volume_stats_used_bytes{persistentvolumeclaim=~".*elasticsearch.*"})
+              /
+              sum by (namespace, persistentvolumeclaim) (kubelet_volume_stats_capacity_bytes{persistentvolumeclaim=~".*elasticsearch.*"})
+            ) > 0.95
+          labels:
+            service: camunda8
+            category: infrastructure
+            severity: critical
+            priority: P1
+          annotations:
+            summary: Elasticsearch PVC capacity ≥ 95%
+            description: Elasticsearch PVC usage exceeds 95% of capacity.
