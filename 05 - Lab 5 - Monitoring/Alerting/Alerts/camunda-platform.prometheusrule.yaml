@@ -63,7 +63,7 @@ spec:
             description: 95th percentile stream processor latency exceeded 1s for 5 minutes.
 
         - alert: CamundaConnectorsJobWorkerBacklog
-          expr: max_over_time(executor_queued_tasks{name="zeebe_client_thread_pool"}[5m]) >= 40
+          expr: max_over_time(executor_queued_tasks{name="zeebe_client_thread_pool"}[5m]) >= 80
           for: 20m
           labels:
             service: camunda8
@@ -72,7 +72,7 @@ spec:
             priority: P3
           annotations:
             summary: Connectors job worker backlog high
-            description: executor_queued_tasks for Zeebe client thread pool >= 40 for 20m.
+            description: executor_queued_tasks for Zeebe client thread pool >= 80 for 20m.
 
         - alert: CamundaOperateImportLagging
           expr: (rate(operate_import_time_seconds_sum[5m]) / rate(operate_import_time_seconds_count[5m])) > 900

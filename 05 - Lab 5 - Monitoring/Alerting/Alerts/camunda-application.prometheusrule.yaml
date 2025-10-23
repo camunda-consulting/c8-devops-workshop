@@ -23,7 +23,7 @@ spec:
             description: zeebe_pending_incidents > 0 indicates unresolved incidents in the cluster.
 
         - alert: CamundaApplicationJobWorkerBacklog
-          expr: max_over_time(executor_queued_tasks{name="zeebe_client_thread_pool"}[5m]) >= 40
+          expr: max_over_time(executor_queued_tasks{name="zeebe_client_thread_pool"}[5m]) >= 80
           for: 20m
           labels:
             service: camunda8
@@ -32,4 +32,4 @@ spec:
             priority: P3
           annotations:
             summary: Job worker/custom connector backlog high
-            description: executor_queued_tasks for Zeebe client thread pool >= 40 for 20m.
+            description: executor_queued_tasks for Zeebe client thread pool >= 80 for 20m.
