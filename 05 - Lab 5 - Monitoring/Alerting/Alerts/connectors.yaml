@@ -56,7 +56,7 @@ spec:
           expr: |-
             max_over_time(executor_queued_tasks{name="zeebe_client_thread_pool"}[5m])
             * on (namespace) group_left (label_cloud_camunda_io_sales_plan_type) (max(kube_namespace_labels) by (namespace, label_cloud_camunda_io_sales_plan_type))
-            >= 40
+            >= 80
           for: 20m
           labels:
             severity: critical
