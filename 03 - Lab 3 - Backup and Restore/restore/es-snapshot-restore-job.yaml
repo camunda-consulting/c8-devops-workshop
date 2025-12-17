@@ -44,4 +44,4 @@ spec:
           done
           
           echo "Restore operations for all repositories completed."
-      restartPolicy: OnFailure
+      restartPolicy: Never
