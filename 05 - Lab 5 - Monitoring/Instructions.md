@@ -6,7 +6,11 @@ Also for Prometheus we can use a Helm Chart
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 ```
 ```shell
-helm install prometheus prometheus-community/kube-prometheus-stack --set prometheus-node-exporter.hostRootFsMount.enabled=false --set grafana.defaultDashboardsTimezone=browser
+kubectl create ns monitoring
+```
+
+```shell
+helm install -n monitoring prometheus prometheus-community/kube-prometheus-stack --set prometheus-node-exporter.hostRootFsMount.enabled=false --set grafana.defaultDashboardsTimezone=browser
 ```
 
 https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack
@@ -18,10 +22,15 @@ kubectl port-forward svc/prometheus-kube-prometheus-prometheus 9090:9090
 Run query e.g. `apiserver_request_total`
 
 ```shell
-kubectl port-forward svc/prometheus-grafana 8080:80
+kubectl port-forward svc/prometheus-grafana 3000:3000
 ```
 
-login: admin / prom-operator
+user: admin  
+password: 
+```shell
+kubectl -n monitoring get secrets prometheus-grafana -o jsonpath="{.data.admin-password}" | base64 -d ; echo
+```
+
 
 ## Import Dashboard
 
