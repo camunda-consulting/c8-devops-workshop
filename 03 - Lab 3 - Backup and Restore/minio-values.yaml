@@ -1,3 +1,11 @@
+image:
+  repository: bitnamilegacy/minio
+  tag: 2025.7.23
+console:
+  image:
+    repository: bitnamilegacy/minio-object-browser
+    tag: 2.0.2
+
 auth:
   rootUser: minioadmin
   rootPassword: minioadmin
