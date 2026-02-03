@@ -2,6 +2,11 @@ connectors:
   enabled: false
 
 orchestration:
+  security:
+    authentication:
+      unprotectedApi: true
+    authorizations:
+      enabled: false
   env:
   - name: SPRING_PROFILES_INCLUDE
     value: "backup"
@@ -11,11 +16,9 @@ orchestration:
         data:
           backup:
             repository-name: "camunda-backup"
+
       zeebe:
         broker:
-          gateway:
-            authentication:
-              mode: none
           data:
             backup:
               enabled: true
