@@ -1,35 +1,21 @@
 connectors:
   enabled: false
 
-operate:
-  env:
-  - name: CAMUNDA_OPERATE_BACKUP_REPOSITORY_NAME
-    value: "operate-backup"
-
-optimize:
-  env:
-  - name: CAMUNDA_OPTIMIZE_BACKUP_REPOSITORY_NAME
-    value: "optimize-backup"
-
-tasklist:
-  env:
-  - name: CAMUNDA_TASKLIST_BACKUP_REPOSITORY_NAME
-    value: "tasklist-backup"
-
-zeebe-gateway:
-  replicas: 1
-  env:
-  - name: ZEEBE_GATEWAY_SECURITY_AUTHENTICATION_MODE
-    value: none
-# Backup
-zeebe:
+orchestration:
   env:
   - name: SPRING_PROFILES_INCLUDE
     value: "backup"
   extraConfiguration:
     application-backup.yaml: |
+      camunda:
+        data:
+          backup:
+            repository-name: "camunda-backup"
       zeebe:
         broker:
+          gateway:
+            authentication:
+              mode: none
           data:
             backup:
               enabled: true
@@ -43,10 +29,30 @@ zeebe:
                 region: us-east-1
                 basePath: zeebe
 
+optimize:
+  env:
+  - name: CAMUNDA_OPTIMIZE_BACKUP_REPOSITORY_NAME
+    value: "optimize-backup"
+
 elasticsearch:
+  master:
+    masterOnly: false
+    replicaCount: 1
+  data:
+    replicaCount: 0
+  coordinating:
+    replicaCount: 0
+  ingest:
+    replicaCount: 0
+  image:
+    repository: bitnamilegacy/elasticsearch
+    tag: 8.18.0
   global:
    kibanaEnabled: true
   kibana:
+    image:
+      repository: bitnamilegacy/kibana
+      tag: 8.18.0 
     readinessProbe:
       enabled: false
   initScripts:
