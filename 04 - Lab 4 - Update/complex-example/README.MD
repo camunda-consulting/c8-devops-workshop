@@ -9,6 +9,20 @@ Helm Chart used: https://artifacthub.io/packages/helm/camunda/camunda-platform/8
 helm install --namespace camunda camunda camunda/camunda-platform -f ./Camunda8.2.20-with-ES7.17.15-values.yaml --version 8.2.20 --create-namespace
 ```
 
+## Optional
+
+Create a camunda namespace
+
+```
+kubectl create ns camunda-platform
+```
+
+Switch all commands to this namespace instead of default
+
+```
+kubectl config set-context --current --namespace=camunda-platform
+```
+
 ## Create sample data
 
 ```bash
@@ -122,7 +136,7 @@ Docs: https://docs.camunda.io/docs/self-managed/setup/upgrade/#from-camunda-84-t
 
 
 ```bash
-helm upgrade -f ./Camunda8.5.0-with-ES8.13.0-values.yaml  camunda camunda/camunda-platform --version 10.6.0
+helm upgrade --install -f ./Camunda8.5.0-with-ES8.13.0-values.yaml  camunda camunda/camunda-platform --version 10.6.0
 ```
 
 # Upgrade Camunda 8.5.0 to 8.6.
@@ -131,7 +145,7 @@ Docs: https://docs.camunda.io/docs/self-managed/setup/upgrade/?upgrades=8.6
 
 
 ```bash
-helm upgrade -f ./Camunda8.6.0-with-ES8.15.4-values.yaml  camunda camunda/camunda-platform --version 11.3.1
+helm upgrade --install -f ./Camunda8.6.0-with-ES8.15.4-values.yaml  camunda camunda/camunda-platform --version 11.11.4
 ```
 
 
@@ -141,7 +155,17 @@ Docs: https://docs.camunda.io/docs/self-managed/setup/upgrade/?upgrades=8.7
 
 
 ```bash
-helm upgrade -f ./Camunda8.7.0-with-ES8.17.1-values.yaml  camunda camunda/camunda-platform --version 12.0.1
+helm upgrade -f ./Camunda8.7.0-with-ES8.17.1-values.yaml  camunda camunda/camunda-platform --version 12.7.5
+```
+
+
+# Upgrade Camunda 8.7.x to 8.8.x.
+Docs: https://docs.camunda.io/docs/self-managed/operational-guides/update-guide/870-to-880/
+Docs: https://docs.camunda.io/docs/self-managed/setup/upgrade/?upgrades=8.8
+
+
+```bash
+helm upgrade -f ./Camunda8.8.0-with-ES8.18.0-values.yaml  camunda camunda/camunda-platform --version 13.4.1
 ```
 
 # Verification
