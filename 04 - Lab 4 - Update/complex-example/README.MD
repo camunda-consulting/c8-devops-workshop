@@ -9,6 +9,20 @@ Helm Chart used: https://artifacthub.io/packages/helm/camunda/camunda-platform/8
 helm install --namespace camunda camunda camunda/camunda-platform -f ./Camunda8.2.20-with-ES7.17.15-values.yaml --version 8.2.20 --create-namespace
 ```
 
+## Optional
+
+Create a camunda namespace
+
+```
+kubectl create ns camunda-platform
+```
+
+Switch all commands to this namespace instead of default
+
+```
+kubectl config set-context --current --namespace=camunda-platform
+```
+
 ## Create sample data
 
 ```bash
@@ -122,7 +136,7 @@ Docs: https://docs.camunda.io/docs/self-managed/setup/upgrade/#from-camunda-84-t
 
 
 ```bash
-helm upgrade --install -f ./Camunda8.5.0-with-ES8.13.0-values.yaml  camunda-platform camunda/camunda-platform --version 10.6.0
+helm upgrade --install -f ./Camunda8.5.0-with-ES8.13.0-values.yaml  camunda camunda/camunda-platform --version 10.6.0
 ```
 
 # Upgrade Camunda 8.5.0 to 8.6.
