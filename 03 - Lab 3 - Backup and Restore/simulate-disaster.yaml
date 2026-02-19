@@ -1,0 +1,125 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: zeebe-disaster-simulator
+  labels:
+    type: camunda-backup-restore
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: zeebe-disaster-simulator
+  labels:
+    type: camunda-backup-restore
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch", "delete"]
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["create"]
+- apiGroups: ["apps"]
+  resources: ["statefulsets"]
+  verbs: ["get", "list", "patch", "update"]
+- apiGroups: ["apps"]
+  resources: ["statefulsets/scale"]
+  verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: zeebe-disaster-simulator
+  labels:
+    type: camunda-backup-restore
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: zeebe-disaster-simulator
+subjects:
+- kind: ServiceAccount
+  name: zeebe-disaster-simulator
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: camunda-simulate-disaster
+  labels:
+    type: camunda-backup-restore
+spec:
+  template:
+    metadata:
+      labels:
+        type: camunda-backup-restore
+    spec:
+      serviceAccountName: zeebe-disaster-simulator
+      restartPolicy: Never
+      containers:
+      - name: disaster-simulator
+        image: bitnami/kubectl:latest
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+          
+          echo "=========================================="
+          echo "Simulating Disaster: Deleting Zeebe Data"
+          echo "=========================================="
+          echo ""
+          
+          # Get Zeebe StatefulSet name
+          ZEEBE_STS=$(kubectl get statefulset -l app.kubernetes.io/component=zeebe-broker -o jsonpath='{.items[0].metadata.name}')
+          
+          if [ -z "$ZEEBE_STS" ]; then
+            echo "ERROR: No Zeebe StatefulSet found!"
+            exit 1
+          fi
+          
+          echo "Found Zeebe StatefulSet: $ZEEBE_STS"
+          
+          # Get current replica count
+          REPLICA_COUNT=$(kubectl get statefulset $ZEEBE_STS -o jsonpath='{.spec.replicas}')
+          echo "Current replica count: $REPLICA_COUNT"
+          
+          if [ "$REPLICA_COUNT" -eq 0 ]; then
+            echo "ERROR: Zeebe StatefulSet already scaled to 0!"
+            exit 1
+          fi
+          
+          echo ""
+          echo "Starting disaster simulation for all replicas..."
+          echo ""
+          
+          # Loop through all replicas
+          for ((i=REPLICA_COUNT-1; i>=0; i--)); do
+            POD_NAME="${ZEEBE_STS}-${i}"
+            
+            echo "----------------------------------------"
+            echo "Processing replica $i: $POD_NAME"
+            echo "----------------------------------------"
+            
+            # Delete all contents in data directory including hidden files
+            echo "  Deleting all contents in data directory of $POD_NAME..."
+            kubectl exec $POD_NAME -- sh -c "rm -rf /usr/local/zeebe/data/* /usr/local/zeebe/data/.[!.]* /usr/local/zeebe/data/..?*" || {
+              echo "  ERROR: Failed to delete data in $POD_NAME"
+              exit 1
+            }
+            
+            echo "  ✓ Data deleted successfully in $POD_NAME"
+            
+            # Verify data directory is empty
+            echo "  Verifying data directory is empty..."
+            kubectl exec $POD_NAME -- sh -c "ls -la /usr/local/zeebe/data/" || true
+            echo ""
+          done
+          
+          echo "=========================================="
+          echo "Disaster simulation complete!"
+          echo ""
+          echo "Actions taken:"
+          echo "  - Deleted data directories in all $REPLICA_COUNT Zeebe brokers"
+          echo ""
+          echo "Next steps:"
+          echo "  - Delete pods or scale down StatefulSet manually"
+          echo "  - Zeebe will be restored as part of the restore process"
+          echo "=========================================="

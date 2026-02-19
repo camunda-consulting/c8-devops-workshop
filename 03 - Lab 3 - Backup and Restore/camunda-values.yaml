@@ -1,3 +1,13 @@
+global:
+  security:
+    allowInsecureImages: true
+
+identityKeycloak:
+  postgresql:
+    image:
+      repository: bitnamilegacy/postgresql
+      tag: 15.10.0-debian-12-r2
+
 connectors:
   enabled: false
 
@@ -7,9 +17,7 @@ operate:
     value: "operate-backup"
 
 optimize:
-  env:
-  - name: CAMUNDA_OPTIMIZE_BACKUP_REPOSITORY_NAME
-    value: "optimize-backup"
+  enabled: false
 
 tasklist:
   env:
@@ -44,11 +52,28 @@ zeebe:
                 basePath: zeebe
 
 elasticsearch:
+  sysctlImage:
+    repository: bitnamilegacy/os-shell
+  copyTlsCerts:
+    image:
+      repository: bitnamilegacy/os-shell
+  volumePermissions:
+    image:
+      repository: bitnamilegacy/os-shell
+  master:
+    masterOnly: false
+    replicaCount: 1
+  data:
+    replicaCount: 0
+  coordinating:
+    replicaCount: 0
+  ingest:
+    replicaCount: 0
+  image:
+    repository: bitnamilegacy/elasticsearch
+    tag: 8.15.4
   global:
-   kibanaEnabled: true
-  kibana:
-    readinessProbe:
-      enabled: false
+    kibanaEnabled: false
   initScripts:
     init-keystore.sh: |
       #!/bin/bash
@@ -61,7 +86,7 @@ elasticsearch:
       echo "$S3_ACCESS_KEY" | elasticsearch-keystore add -f -x s3.client.default.access_key
 
   extraEnvVars:
-  - name: S3_SECRET_KEY
-    value: minioadmin
-  - name: S3_ACCESS_KEY
-    value: minioadmin
+    - name: S3_SECRET_KEY
+      value: minioadmin
+    - name: S3_ACCESS_KEY
+      value: minioadmin

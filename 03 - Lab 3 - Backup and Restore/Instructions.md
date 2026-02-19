@@ -13,19 +13,13 @@ kubectl apply -f ./script-config.yaml
 ### Create Minio
 
 ```bash
-helm install minio oci://registry-1.docker.io/bitnamicharts/minio -f ./minio-values.yaml
+helm upgrade --install minio oci://registry-1.docker.io/bitnamicharts/minio -f ./minio-values.yaml 
 ```
 
 ### Install Camunda
 
 ```bash
-helm install camunda camunda/camunda-platform -f ./camunda-values.yaml
-```
-
-### Wait for ES to be ready
-
-```bash
-kubectl rollout status sts/camunda-elasticsearch-master
+helm upgrade --install camunda camunda/camunda-platform -f ./camunda-values.yaml --version 11.7.0
 ```
 
 ### Register Snapshot Repositories
@@ -33,13 +27,6 @@ kubectl rollout status sts/camunda-elasticsearch-master
 ```bash
 kubectl apply -f ./es-snapshot-minio-job.yaml
 ```
-
-```bash
-kubectl logs -f $(kubectl get pods --selector=job-name=camunda-es-snapshot-minio-job --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
-```
-
-When it is complete, you can delete the job:
-
 ```bash
 kubectl delete -f ./es-snapshot-minio-job.yaml
 ```
@@ -56,16 +43,12 @@ kubectl apply -f ./backup/zbctl-deploy-job.yaml
 ```
 
 ```bash
-kubectl logs -f $(kubectl get pods --selector=job-name=camunda-zbctl-deploy --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
-```
-
-```bash
 kubectl create configmap payload --from-file=./backup/payload.json
 kubectl label configmap payload type=camunda-backup-restore
 ```
 
 ```bash
-kubectl apply -f ./backup/benchmark.yaml && sleep 30 && kubectl delete -f ./backup/benchmark.yaml
+kubectl apply -f ./backup/benchmark.yaml && sleep 60 && kubectl delete -f ./backup/benchmark.yaml
 ```
 
 ### Review Current State
@@ -77,94 +60,47 @@ kubectl apply -f ./backup/benchmark.yaml && sleep 30 && kubectl delete -f ./back
 ```bash
 kubectl apply -f ./backup/create-backup.yaml
 ```
-
-```bash
-kubectl logs -f $(kubectl get pods --selector=job-name=camunda-create-backup --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
-```
-
-As soon as the backup is complete, you can delete the job
-
 ```bash
 kubectl delete -f ./backup/create-backup.yaml
 ```
 
 ## Simulate Data Loss
 
-```bash
-helm delete camunda
-```
+### Simulate Disaster for Both Zeebe and Elasticsearch
+**Using Kubernetes Job (requires RBAC)**
 
 ```bash
-kubectl delete pvc data-camunda-elasticsearch-master-0 data-camunda-elasticsearch-master-1 data-camunda-postgresql-0 data-camunda-zeebe-0 data-camunda-zeebe-1 data-camunda-zeebe-2
+kubectl apply -f ./simulate-disaster.yaml
+kubectl apply -f ./simulate-es-disaster.yaml
 ```
+
+Wait for jobs to complete, then cleanup:
+```bash
+kubectl delete -f ./simulate-disaster.yaml
+kubectl delete -f ./simulate-es-disaster.yaml
+```
+
+At this point:
+- All Zeebe brokers have lost their data (empty data directories)
+- All Camunda indices in Elasticsearch have been deleted
+- Zeebe pods are still running but cannot function without data
 
 ## Restore
 
-### Create New Camunda Cluster
+### Stop Camunda Components for Restore
+
+Scale down Zeebe and webapps to prepare for restore:
 
 ```bash
-helm install camunda camunda/camunda-platform -f ./camunda-values.yaml
+helm upgrade camunda camunda/camunda-platform --version 11.7.0 -f ./camunda-values.yaml -f ./restore/camunda-index-restore.yaml
 ```
 
-```bash
-kubectl rollout status deploy/camunda-operate
-```
-
-Why? Templates and Aliases are created again.
-
-### Verify that Templates are generated
-
-![Templates](images/kibana-templates.png)
-
-### Register ES Repositories again
-
-```bash
-kubectl apply -f ./es-snapshot-minio-job.yaml
-```
-
-```bash
-kubectl logs -f $(kubectl get pods --selector=job-name=es-snapshot-minio-job --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
-```
-
-When it is complete, you can delete the job:
-
-```bash
-kubectl delete -f ./es-snapshot-minio-job.yaml
-```
-
-### Find a backup to restore from
-
-```bash
-kubectl apply -f ./restore/find-backup.yaml
-```
-
-```bash
-kubectl logs -f $(kubectl get pods --selector=job-name=camunda-find-backup --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
-```
 
 Set the backup id you want to restore from to the `scamunda-script-config` and apply it again:
-
 ```bash
 kubectl apply -f ./script-config.yaml
 ```
 
-When this is done, you can delete the job:
-
-```bash
-kubectl delete -f ./restore/find-backup.yaml
-```
-
-### Disable Zeebe & Webapps
-
-```bash
-helm upgrade camunda camunda/camunda-platform -f ./camunda-values.yaml -f ./restore/camunda-index-restore.yaml
-```
-
-### Delete all Indices
-
-```bash
-kubectl apply -f ./restore/es-delete-all-indices.yaml
-```
 
 ### Restore Snapshots
 
@@ -172,22 +108,26 @@ kubectl apply -f ./restore/es-delete-all-indices.yaml
 kubectl apply -f ./restore/es-snapshot-restore-job.yaml
 ```
 
-### Delete Zeebe disk
-
 ```bash
-kubectl delete $(kubectl get pvc -o name | grep zeebe)
+kubectl delete -f ./restore/es-snapshot-restore-job.yaml
 ```
 
 ### Restore Zeebe
 
+Now we'll restore Zeebe from the backup. Since we deleted the data directory, Zeebe will restore from the S3 backup when started with restore mode:
+
 ```bash
-helm upgrade camunda camunda/camunda-platform -f ./camunda-values.yaml -f ./restore/camunda-zeebe-restore.yaml
+helm upgrade camunda camunda/camunda-platform --version 11.7.0 -f ./camunda-values.yaml -f ./restore/camunda-zeebe-restore.yaml
+```
+
+delete statefulset (so that regular statefulset can be created next)
+```bash
+kubectl delete statefulsets.apps camunda-zeebe
 ```
 
 ### Return to normal platform state
-
 ```bash
-helm upgrade camunda camunda/camunda-platform -f ./camunda-values.yaml
+helm upgrade --version 11.7.0 camunda camunda/camunda-platform -f ./camunda-values.yaml
 ```
 
 ## Validate Restore

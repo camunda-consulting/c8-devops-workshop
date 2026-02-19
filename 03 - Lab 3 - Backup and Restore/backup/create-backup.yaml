@@ -13,29 +13,26 @@ spec:
         envFrom:
         - configMapRef:
             name: camunda-script-config
-        command: ["/bin/sh"]
+        command: ["/bin/bash"]
         args:
         - -c
         - |
-          #!/bin/sh
+          #!/bin/bash
           set -e
 
           # only export the BACKUP_ID once as it has to stay consistent throughout the backup procedure
           BACKUP_ID=$(date +%s) # unix timestamp as unique always increasing ID
 
           OPERATE_MANAGEMENT_API="http://$CAMUNDA_RELEASE_NAME-operate:9600"
-          OPTIMIZE_MANAGEMENT_API="http://$CAMUNDA_RELEASE_NAME-optimize:8092"
           TASKLIST_MANAGEMENT_API="http://$CAMUNDA_RELEASE_NAME-tasklist:9600"
           GATEWAY_MANAGEMENT_API="http://$CAMUNDA_RELEASE_NAME-zeebe-gateway:9600"
 
           # Start webapp backups
-          curl --fail -XPOST "$OPTIMIZE_MANAGEMENT_API/actuator/backups" -H "Content-Type: application/json" -d "{\"backupId\": $BACKUP_ID}"
           curl --fail -XPOST "$OPERATE_MANAGEMENT_API/actuator/backups" -H "Content-Type: application/json" -d "{\"backupId\": $BACKUP_ID}"
           curl --fail -XPOST "$TASKLIST_MANAGEMENT_API/actuator/backups" -H "Content-Type: application/json" -d "{\"backupId\": $BACKUP_ID}"
-          echo -e "\nBackups started for Operate, Optimize, and Tasklist with backup ID: $BACKUP_ID"
+          echo -e "\nBackups started for Operate, and Tasklist with backup ID: $BACKUP_ID"
 
           # wait for backups to complete
-          while [[ "$(curl --fail -s "$OPTIMIZE_MANAGEMENT_API/actuator/backups/$BACKUP_ID" | jq -r .state)" != "COMPLETED" ]]; do echo -e "\nWaiting..."; sleep 5; done; echo -e "\nFinished Optimize backup with ID $BACKUP_ID"
           while [[ "$(curl --fail -s "$OPERATE_MANAGEMENT_API/actuator/backups/$BACKUP_ID" | jq -r .state)" != "COMPLETED" ]]; do echo -e "\nWaiting..."; sleep 5; done; echo -e "\nFinished Operate backup with ID $BACKUP_ID"
           while [[ "$(curl --fail -s "$TASKLIST_MANAGEMENT_API/actuator/backups/$BACKUP_ID" | jq -r .state)" != "COMPLETED" ]]; do echo -e "\nWaiting..."; sleep 5; done; echo -e "\nFinished Tasklist backup with ID $BACKUP_ID"
           echo -e "\nAll webapp backups completed successfully."
@@ -54,7 +51,7 @@ spec:
             while [[ "$(curl --fail -s "$GATEWAY_MANAGEMENT_API/actuator/backups/$BACKUP_ID" | jq -r .state)" != "COMPLETED" ]]; do echo -e "\nWaiting..."; sleep 5; done; echo -e "\nFinished zeebe backup with ID $BACKUP_ID" &&
             # resume exporter
             curl --fail -XPOST "$GATEWAY_MANAGEMENT_API/actuator/exporting/resume" &&
-            echo -e "\nCamunda backup completed successfully with ID $BACKUP_ID" &&
+            echo -e "\nCamunda backup completed successfully with ID $BACKUP_ID"
           } || {
             # always resume the exporter in case of an error
             curl --fail -XPOST "$GATEWAY_MANAGEMENT_API/actuator/exporting/resume"

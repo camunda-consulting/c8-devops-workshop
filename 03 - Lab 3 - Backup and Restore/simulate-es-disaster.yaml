@@ -1,0 +1,94 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: camunda-simulate-es-disaster
+  labels:
+    type: camunda-backup-restore
+spec:
+  template:
+    metadata:
+      labels:
+        type: camunda-backup-restore
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: es-disaster-simulator
+        image: curlimages/curl
+        env:
+        - name: ELASTIC_ENDPOINT
+          value: "http://camunda-elasticsearch:9200"
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          
+          echo "=========================================="
+          echo "Simulating ES Disaster: Deleting Indices"
+          echo "=========================================="
+          echo ""
+          
+          # Define index prefixes to delete
+          PREFIXES="operate- tasklist- zeebe-record_"
+          
+          echo "Fetching all indices..."
+          ALL_INDICES=$(curl -s "$ELASTIC_ENDPOINT/_cat/indices?h=index" || {
+            echo "ERROR: Failed to fetch indices from Elasticsearch"
+            exit 1
+          })
+          
+          if [ -z "$ALL_INDICES" ]; then
+            echo "WARNING: No indices found in Elasticsearch"
+            exit 0
+          fi
+          
+          echo "Found indices. Starting deletion..."
+          echo ""
+          
+          DELETED_COUNT=0
+          
+          # Loop through each prefix
+          for PREFIX in $PREFIXES; do
+            echo "----------------------------------------"
+            echo "Processing prefix: $PREFIX"
+            echo "----------------------------------------"
+            
+            # Find and delete indices matching this prefix
+            MATCHING_INDICES=$(echo "$ALL_INDICES" | grep "^${PREFIX}" || true)
+            
+            if [ -z "$MATCHING_INDICES" ]; then
+              echo "  No indices found with prefix: $PREFIX"
+              echo ""
+              continue
+            fi
+            
+            # Delete each matching index
+            echo "$MATCHING_INDICES" | while read -r INDEX; do
+              if [ -n "$INDEX" ]; then
+                echo "  Deleting index: $INDEX"
+                
+                RESPONSE=$(curl -s -w "\n%{http_code}" -X DELETE "$ELASTIC_ENDPOINT/$INDEX")
+                HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+                
+                if [ "$HTTP_CODE" = "200" ]; then
+                  echo "  ✓ Successfully deleted: $INDEX"
+                  DELETED_COUNT=$((DELETED_COUNT + 1))
+                else
+                  echo "  ✗ Failed to delete: $INDEX (HTTP $HTTP_CODE)"
+                fi
+              fi
+            done
+            
+            echo ""
+          done
+          
+          echo "=========================================="
+          echo "ES Disaster simulation complete!"
+          echo ""
+          echo "Actions taken:"
+          echo "  - Deleted $DELETED_COUNT indices"
+          echo "  - Prefixes: operate-, tasklist-, zeebe-record-"
+          echo ""
+          echo "Next steps:"
+          echo "  - Elasticsearch indices will be restored as part of the restore process"
+          echo "=========================================="
