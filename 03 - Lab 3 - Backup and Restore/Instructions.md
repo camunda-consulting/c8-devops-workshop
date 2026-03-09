@@ -107,7 +107,7 @@ helm install camunda camunda/camunda-platform -f ./camunda-values.yaml
 ```
 
 ```bash
-kubectl rollout status deploy/camunda-operate
+kubectl rollout status deploy/camunda-zeebe
 ```
 
 Why? Templates and Aliases are created again.
@@ -142,7 +142,7 @@ kubectl apply -f ./restore/find-backup.yaml
 kubectl logs -f $(kubectl get pods --selector=job-name=camunda-find-backup --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
 ```
 
-Set the backup id you want to restore from to the `scamunda-script-config` and apply it again:
+Set the backup id you want to restore from to the `camunda-script-config` and apply it again:
 
 ```bash
 kubectl apply -f ./script-config.yaml

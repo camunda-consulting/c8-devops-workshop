@@ -1,7 +1,9 @@
-zeebe:
+orchestration:
    enabled: true
    env:
    # Environment variables to overwrite the Zeebe startup behavior
+   - name: ZEEBE_RESTORE_IGNOREFILESINTARGET
+     value: ".snapshot,lost+found"
    - name: ZEEBE_RESTORE
      value: "true"
    - name: ZEEBE_RESTORE_FROM_BACKUP_ID
@@ -14,10 +16,4 @@ zeebe:
 connectors:
    enabled: false
 optimize:
-   enabled: false
-operate:
-   enabled: false
-tasklist:
-   enabled: false
-zeebeGateway:
    enabled: false

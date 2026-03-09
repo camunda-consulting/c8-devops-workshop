@@ -20,5 +20,5 @@ spec:
           #!/bin/sh
           set -e
 
-          curl --fail "http://$CAMUNDA_RELEASE_NAME-zeebe-gateway:9600/actuator/backups" | jq 'sort_by(.backupId) | .[] | select(.state == "COMPLETED") | .backupId'
+          curl --fail "http://$CAMUNDA_RELEASE_NAME-zeebe-gateway:9600/actuator/backupRuntime" | jq 'sort_by(.backupId) | .[] | select(.state == "COMPLETED") | .backupId'
       restartPolicy: OnFailure
