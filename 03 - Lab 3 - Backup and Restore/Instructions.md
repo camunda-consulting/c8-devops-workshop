@@ -58,6 +58,11 @@ kubectl apply -f ./backup/zbctl-deploy-job.yaml
 ```bash
 kubectl logs -f $(kubectl get pods --selector=job-name=camunda-zbctl-deploy --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
 ```
+When it is complete, you can delete the job:
+
+```bash
+kubectl delete -f ./backup/zbctl-deploy-job.yaml
+```
 
 ```bash
 kubectl create configmap payload --from-file=./backup/payload.json
@@ -95,7 +100,7 @@ helm delete camunda
 ```
 
 ```bash
-kubectl delete pvc data-camunda-elasticsearch-master-0 data-camunda-elasticsearch-master-1 data-camunda-postgresql-0 data-camunda-zeebe-0 data-camunda-zeebe-1 data-camunda-zeebe-2
+kubectl delete pvc data-camunda-elasticsearch-master-0 data-camunda-postgresql-0 data-camunda-zeebe-0 data-camunda-zeebe-1 data-camunda-zeebe-2
 ```
 
 ## Restore
@@ -107,7 +112,7 @@ helm install camunda camunda/camunda-platform -f ./camunda-values.yaml
 ```
 
 ```bash
-kubectl rollout status deploy/camunda-zeebe
+kubectl rollout status sts/camunda-zeebe
 ```
 
 Why? Templates and Aliases are created again.

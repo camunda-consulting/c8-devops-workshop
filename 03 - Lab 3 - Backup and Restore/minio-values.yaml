@@ -11,3 +11,7 @@ auth:
   rootPassword: minioadmin
 
 defaultBuckets: camunda
+
+resources:
+  requests:
+    memory: "1Gi"
