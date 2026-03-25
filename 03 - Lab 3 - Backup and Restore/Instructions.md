@@ -195,6 +195,8 @@ helm upgrade camunda camunda/camunda-platform -f ./camunda-values.yaml -f ./rest
 helm upgrade camunda camunda/camunda-platform -f ./camunda-values.yaml
 ```
 
+> **NOTE:**  You can find the whole restore procedure scripted at ./restore/restore-backup.sh. There is as well an AI enhanced version with better error handling and logging available at ./restore/restore-backup-ai-improved.sh. BUT: Those scripts must only be handled as a blueprint and adjusted to your needs. We don't guarantee that they will work in your environment, so make sure to enhance, test and maintain them on your own.
+
 ## Validate Restore
 
 ### Operate
