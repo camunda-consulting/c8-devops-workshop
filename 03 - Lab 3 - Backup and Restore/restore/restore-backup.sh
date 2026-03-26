@@ -99,20 +99,20 @@ log_section "Step 1: Creating Camunda cluster for ES templates"
 helm install $CAMUNDA_RELEASE_NAME camunda/camunda-platform -f ./camunda-values.yaml -n "$CAMUNDA_NAMESPACE" --wait
 log "Initial Camunda Platform installed successfully for ES templates"
 
-# Create ES snapshot repository
-log_section "Step 2: Creating Elasticsearch snapshot repository"
+# Configure ES snapshot repository
+log_section "Step 2: Configure Elasticsearch snapshot repository"
 kubectl apply -f ./es-snapshot-minio-job.yaml -n "$CAMUNDA_NAMESPACE"
 kubectl wait --for=condition=complete --timeout=600s job/camunda-es-snapshot-minio-job -n "$CAMUNDA_NAMESPACE"
-log "Elasticsearch snapshot repository created successfully"
+log "Elasticsearch snapshot repository configured successfully"
 
-# Disable Zeebe & Webapps
-log_section "Step 3: Disabling Zeebe and Webapps"
+# Stop all components apart from Elasticsearch/OpenSearch
+log_section "Step 3: Stop all components apart from Elasticsearch/OpenSearch"
 helm upgrade $CAMUNDA_RELEASE_NAME camunda/camunda-platform \
   -f ./camunda-values.yaml \
   -f ./restore/camunda-index-restore.yaml \
   -n "$CAMUNDA_NAMESPACE" \
   --wait
-log "Zeebe and Webapps disabled successfully"
+log "All components apart from Elasticsearch/OpenSearch stopped successfully"
 
 # Delete all indices in ES
 log_section "Step 4: Deleting all Elasticsearch indices"
@@ -142,11 +142,13 @@ helm upgrade $CAMUNDA_RELEASE_NAME camunda/camunda-platform \
   -f ./camunda-values.yaml \
   -f ./restore/camunda-zeebe-restore.yaml \
   -n "$CAMUNDA_NAMESPACE"
+
 wait_for_log_pattern_all_zeebe_pods \
   "$CAMUNDA_NAMESPACE" \
   "$ZEEBE_LABEL_SELECTOR" \
   "$LOG_PATTERN" \
   "$TIMEOUT_SECONDS_PER_POD"
+
 log "Zeebe restored successfully"
 
 # Return to normal platform state
