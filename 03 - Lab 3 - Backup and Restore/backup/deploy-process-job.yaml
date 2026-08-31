@@ -1,0 +1,29 @@
+# Deploys BenchmarkProcess.bpmn via Camunda 8.9's REST v2 API
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: camunda-deploy-process
+  labels:
+    type: camunda-backup-restore
+spec:
+  template:
+    spec:
+      containers:
+      - name: deploy-process
+        image: curlimages/curl
+        command:
+        - sh
+        - -c
+        - |
+          curl --fail -X POST "http://camunda-zeebe-gateway:8080/v2/deployments" \
+            -F "resources=@/models/BenchmarkProcess.bpmn;type=application/xml"
+        volumeMounts:
+        - name: models
+          mountPath: /models/BenchmarkProcess.bpmn
+          subPath: BenchmarkProcess.bpmn
+          readOnly: true
+      volumes:
+      - name: models
+        configMap:
+          name: models
+      restartPolicy: Never

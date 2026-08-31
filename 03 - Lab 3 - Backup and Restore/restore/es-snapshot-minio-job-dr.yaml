@@ -1,0 +1,52 @@
+# Registers the SAME MinIO/S3 snapshot repositories on es-dr that were
+# already registered on es-main (backup/es-snapshot-minio-job.yaml) — same
+# repo names, same bucket/base_path, so es-dr can see and restore from the
+# exact snapshots es-main's backups create. Must run before es-restore-job.yaml
+# can list/restore anything.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: camunda-es-snapshot-minio-job-dr
+  labels:
+    type: camunda-backup-restore
+spec:
+  template:
+    spec:
+      containers:
+      - name: es-snapshot-dr
+        image: curlimages/curl
+        envFrom:
+        - configMapRef:
+            name: camunda-script-config
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          #!/bin/sh
+          set -e
+
+          basePaths=$SNAPSHOT_REPOSITORIES
+          bucket=$MINIO_BUCKET
+          # Same scheme-stripping as the es-main registration job — ES's s3
+          # repository "endpoint" setting wants host:port only.
+          endpoint=$(echo "$MINIO_ENDPOINT" | sed -E 's#^https?://##')
+
+          for basePath in $basePaths; do
+            curl --fail -X PUT "http://$ES_DR_ENDPOINT/_snapshot/$basePath" -H 'Content-Type: application/json' -d '
+            {
+              "type": "s3",
+              "settings": {
+                "bucket": "'"$bucket"'",
+                "endpoint": "'"$endpoint"'",
+                "protocol": "http",
+                "compress": true,
+                "client": "default",
+                "path_style_access": true,
+                "base_path": "'"$basePath"'",
+                "readonly": true
+              }
+            }'
+            echo "Repository $basePath registered on es-dr with MinIO."
+          done
+      restartPolicy: OnFailure

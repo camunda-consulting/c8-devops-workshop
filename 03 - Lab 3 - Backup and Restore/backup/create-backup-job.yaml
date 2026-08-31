@@ -1,0 +1,66 @@
+# Triggers a full backup, all under one shared backup ID:
+#   1. Optimize's own ES indices                         -> /actuator/backups
+#   2. Operate/Tasklist's webapp ES indices               -> /actuator/backupHistory
+#   3. Raw zeebe-record_* ES indices (exporter output)    -> ES snapshot API directly
+#   4. Zeebe broker's own runtime state (RocksDB/partitions) -> /actuator/backupRuntime
+# The exporter is soft-paused for the ENTIRE sequence (steps 1-4), not just
+# part of it, so the ES snapshot in step 3 and the RocksDB backup in step 4
+# reflect the same consistent point in time.
+#
+# Apply with:
+#   kubectl apply -f ./backup/create-backup-job.yaml -n camunda-test
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: camunda-create-backup
+  labels:
+    type: camunda-backup-restore
+spec:
+  template:
+    spec:
+      containers:
+      - name: create-backup
+        image: mbentley/swissarmy
+        envFrom:
+        - configMapRef:
+            name: camunda-script-config
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          #!/bin/sh
+          # only export the BACKUP_ID once as it has to stay consistent throughout the backup procedure
+          BACKUP_ID=$(date +%s) # unix timestamp as unique always increasing ID
+
+          ORCHESTRATION_MANAGEMENT_API="http://$CAMUNDA_RELEASE_NAME-zeebe-gateway:9600"
+          OPTIMIZE_MANAGEMENT_API="http://$CAMUNDA_RELEASE_NAME-optimize:8092"
+
+          {
+            curl --fail -XPOST "$ORCHESTRATION_MANAGEMENT_API/actuator/exporting/pause?soft=true" &&
+
+            # Optimize + Operate/Tasklist webapp backups
+            curl --fail -XPOST "$OPTIMIZE_MANAGEMENT_API/actuator/backups" -H "Content-Type: application/json" -d "{\"backupId\": $BACKUP_ID}" &&
+            curl --fail -XPOST "$ORCHESTRATION_MANAGEMENT_API/actuator/backupHistory" -H "Content-Type: application/json" -d "{\"backupId\": $BACKUP_ID}" &&
+            echo -e "\nBackups started for Optimize and Operate/Tasklist with backup ID: $BACKUP_ID" &&
+            while [[ "$(curl --fail -s "$OPTIMIZE_MANAGEMENT_API/actuator/backups/$BACKUP_ID" | jq -r .state)" != "COMPLETED" ]]; do echo "Waiting for Optimize backup..."; sleep 5; done; echo "Finished Optimize backup with ID $BACKUP_ID" &&
+            while [[ "$(curl --fail -s "$ORCHESTRATION_MANAGEMENT_API/actuator/backupHistory/$BACKUP_ID" | jq -r .state)" != "COMPLETED" ]]; do echo "Waiting for Operate/Tasklist backup..."; sleep 5; done; echo "Finished Operate/Tasklist backup with ID $BACKUP_ID" &&
+            echo -e "\nAll webapp backups completed successfully." &&
+
+            # Raw zeebe-record_* indices — the exporter's own output, not covered above
+            curl --fail -XPUT "http://$ES_MAIN_ENDPOINT/_snapshot/$ELASTIC_ZEEBE_RECORDS_SNAPSHOT_REPOSITORY/camunda_zeebe_records_backup_$BACKUP_ID?wait_for_completion=true" -H 'Content-Type: application/json' -d '{"indices": "zeebe-record*", "feature_states": ["none"]}' &&
+            while [[ "$(curl --fail -s "http://$ES_MAIN_ENDPOINT/_snapshot/$ELASTIC_ZEEBE_RECORDS_SNAPSHOT_REPOSITORY/camunda_zeebe_records_backup_$BACKUP_ID/_status" | jq -r '.snapshots[].state')" != "SUCCESS" ]]; do echo -e "\nWaiting for zeebe-record indices snapshot..."; sleep 5; done; echo -e "\nFinished zeebe-record indices snapshot with ID $BACKUP_ID" &&
+
+            # Zeebe broker's own runtime state (RocksDB/partitions)
+            curl --fail -XPOST "$ORCHESTRATION_MANAGEMENT_API/actuator/backupRuntime" -H "Content-Type: application/json" -d "{\"backupId\": $BACKUP_ID}" &&
+            while [[ "$(curl --fail -s "$ORCHESTRATION_MANAGEMENT_API/actuator/backupRuntime/$BACKUP_ID" | jq -r .state)" != "COMPLETED" ]]; do echo -e "\nWaiting for Zeebe runtime backup..."; sleep 5; done; echo -e "\nFinished Zeebe runtime backup with ID $BACKUP_ID" &&
+
+            curl --fail -XPOST "$ORCHESTRATION_MANAGEMENT_API/actuator/exporting/resume" &&
+            echo -e "\nCamunda backup completed successfully with ID $BACKUP_ID"
+          } || {
+            # always resume the exporter in case of an error
+            curl --fail -XPOST "$ORCHESTRATION_MANAGEMENT_API/actuator/exporting/resume"
+            echo -e "\nError during Camunda backup. Please check the logs for details."
+            exit 1
+          }
+      restartPolicy: OnFailure

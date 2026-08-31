@@ -1,5 +1,21 @@
+# MinIO — shared S3-compatible object storage used as the snapshot repository
+# target for BOTH Elasticsearch clusters (es-main and es-dr) and for the Zeebe
+# broker's own backup store. Reused as-is from the Lab 3 pattern.
+#
+# Deploy with:
+#   helm install minio oci://registry-1.docker.io/bitnamicharts/minio -f ./minio-values.yaml
+
 auth:
   rootUser: minioadmin
   rootPassword: minioadmin
 
 defaultBuckets: camunda
+
+image:
+  registry: docker.io
+  repository: bitnamilegacy/minio
+
+console:
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/minio-object-browser

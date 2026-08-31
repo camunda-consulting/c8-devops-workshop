@@ -1,4 +1,14 @@
-# config for https://github.com/camunda-community-hub/camunda-8-benchmark
+# Load generator: https://github.com/camunda-community-hub/camunda-8-benchmark
+# Reused as-is from the Lab 3 pattern — runs inside camunda-test itself, so
+# camunda-zeebe-gateway:26500 resolves without namespace qualification.
+# `plaintext=true` matches orchestration.security.authentication.unprotectedApi
+# in camunda-values.yaml (no auth to configure a client for).
+#
+# Deploy with:
+#   kubectl create configmap payload --from-file=./backup/payload.json -n camunda-test
+#   kubectl label configmap payload type=camunda-backup-restore -n camunda-test
+#   kubectl apply -f ./backup/benchmark.yaml -n camunda-test
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -26,8 +36,8 @@ spec:
               -Dzeebe.client.broker.gateway-address=camunda-zeebe-gateway:26500
               -Dzeebe.client.security.plaintext=true
               -Dzeebe.client.request-timeout=600s
-              -Dzeebe.client.job.poll-interval=1ms
-              -Dzeebe.client.worker.max-jobs-active=2000
+              -Dzeebe.client.job.poll-interval=100ms
+              -Dzeebe.client.worker.max-jobs-active=200
               -Dbenchmark.startPiPerSecond=5
               -Dbenchmark.maxBackpressurePercentage=1.0
               -Dbenchmark.taskCompletionDelay=10

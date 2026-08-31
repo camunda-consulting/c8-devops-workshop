@@ -1,4 +1,10 @@
-# Camunda 8.9 — chart camunda/camunda-platform, version 14.8.5
+# DR FAILOVER version of ../camunda-values.yaml — used INSTEAD of it (not
+# layered on top), because es-main and its whole release were destroyed to
+# simulate the main region going down. Every other setting is identical to
+# the base file; only the ES endpoints differ (es-dr instead of es-main).
+# Deploy with (namespace "camunda-test", script-config.yaml already applied there):
+#   helm install camunda camunda/camunda-platform --version 14.8.5 -f ./restore/camunda-values-failover.yaml -n camunda-test
+
 connectors:
   enabled: false
 
@@ -18,7 +24,7 @@ optimize:
       enabled: true
       url:
         protocol: http
-        host: es-main-master.es-main-dr.svc.cluster.local
+        host: es-dr-master.es-main-dr.svc.cluster.local
         port: 9200
 
 orchestration:
@@ -44,8 +50,7 @@ orchestration:
     secondaryStorage:
       type: elasticsearch
       elasticsearch:
-        url: http://es-main-master.es-main-dr.svc.cluster.local:9200
-
+        url: http://es-dr-master.es-main-dr.svc.cluster.local:9200
   extraConfiguration:
   - file: application-backup.yaml
     content: |
