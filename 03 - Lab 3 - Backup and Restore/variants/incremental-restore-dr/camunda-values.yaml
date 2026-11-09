@@ -1,0 +1,65 @@
+# Camunda 8.9 — chart camunda/camunda-platform, version 14.8.5
+connectors:
+  enabled: false
+
+optimize:
+  enabled: true
+  envFrom:
+  - configMapRef:
+      name: camunda-script-config
+  env:
+  - name: CAMUNDA_OPTIMIZE_BACKUP_REPOSITORY_NAME
+    valueFrom:
+      configMapKeyRef:
+        name: camunda-script-config
+        key: OPTIMIZE_BACKUP_REPOSITORY
+  database:
+    elasticsearch:
+      enabled: true
+      url:
+        protocol: http
+        host: es-main-master.es-main-dr.svc.cluster.local
+        port: 9200
+
+orchestration:
+  envFrom:
+  - configMapRef:
+      name: camunda-script-config
+  env:
+  - name: CAMUNDA_DATA_BACKUP_REPOSITORYNAME
+    valueFrom:
+      configMapKeyRef:
+        name: camunda-script-config
+        key: ORCHESTRATION_BACKUP_REPOSITORY
+  - name: SPRING_PROFILES_INCLUDE
+    value: "backup"
+
+  security:
+    authentication:
+      unprotectedApi: true
+    authorizations:
+      enabled: false
+
+  data:
+    secondaryStorage:
+      type: elasticsearch
+      elasticsearch:
+        url: http://es-main-master.es-main-dr.svc.cluster.local:9200
+
+  extraConfiguration:
+  - file: application-backup.yaml
+    content: |
+      zeebe:
+        broker:
+          data:
+            backup:
+              enabled: true
+              store: S3
+              s3:
+                bucketName: ${MINIO_BUCKET}
+                forcePathStyleAccess: true
+                endpoint: ${MINIO_ENDPOINT}
+                accessKey: minioadmin
+                secretKey: minioadmin
+                region: us-east-1
+                basePath: zeebe

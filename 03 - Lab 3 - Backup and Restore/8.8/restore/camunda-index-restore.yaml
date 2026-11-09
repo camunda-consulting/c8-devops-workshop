@@ -1,0 +1,6 @@
+connectors:
+  enabled: false
+optimize:
+  enabled: false
+orchestration:
+  enabled: false

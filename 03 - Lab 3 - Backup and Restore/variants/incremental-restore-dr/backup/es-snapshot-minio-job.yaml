@@ -1,0 +1,58 @@
+# Registers the MinIO/S3 snapshot repositories on es-main (the ones listed in
+# SNAPSHOT_REPOSITORIES in script-config.yaml: orchestration-backup,
+# optimize-backup, zeebe-records-backup). Reused from the Lab 3 pattern,
+# targeting ES_MAIN_ENDPOINT instead of a single ELASTIC_ENDPOINT.
+#
+# Runs inside camunda-test (where script-config.yaml already lives) — its
+# ES_MAIN_ENDPOINT is already namespace-qualified for reaching es-main-dr.
+#
+# Apply with:
+#   kubectl apply -f ./backup/es-snapshot-minio-job.yaml -n camunda-test
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: camunda-es-snapshot-minio-job
+  labels:
+    type: camunda-backup-restore
+spec:
+  template:
+    spec:
+      containers:
+      - name: es-snapshot
+        image: curlimages/curl
+        envFrom:
+        - configMapRef:
+            name: camunda-script-config
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          #!/bin/sh
+          set -e
+
+          basePaths=$SNAPSHOT_REPOSITORIES
+          bucket=$MINIO_BUCKET
+          # MINIO_ENDPOINT carries a scheme (needed by Zeebe's S3 client config
+          # elsewhere) but ES's s3 repository "endpoint" setting wants host:port
+          # only — protocol is its own separate field below. Confirmed live
+          # earlier: the no-scheme form is what actually verified successfully.
+          endpoint=$(echo "$MINIO_ENDPOINT" | sed -E 's#^https?://##')
+
+          for basePath in $basePaths; do
+            curl --fail -X PUT "http://$ES_MAIN_ENDPOINT/_snapshot/$basePath" -H 'Content-Type: application/json' -d '
+            {
+              "type": "s3",
+              "settings": {
+                "bucket": "'"$bucket"'",
+                "endpoint": "'"$endpoint"'",
+                "protocol": "http",
+                "compress": true,
+                "client": "default",
+                "path_style_access": true,
+                "base_path": "'"$basePath"'"
+              }
+            }'
+            echo "Repository $basePath registered with MinIO."
+          done
+      restartPolicy: OnFailure

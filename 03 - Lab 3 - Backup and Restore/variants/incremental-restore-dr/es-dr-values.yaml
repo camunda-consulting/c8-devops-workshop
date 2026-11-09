@@ -1,0 +1,22 @@
+# Elasticsearch "dr" — the cold-provisioned disaster-recovery cluster.
+
+imageTag: 8.19.0
+
+clusterName: es-dr
+
+replicas: 1
+minimumMasterNodes: 1
+
+clusterHealthCheckParams: "wait_for_status=yellow&timeout=1s"
+
+protocol: http
+createCert: false
+esConfig:               # probe fails against a plain-HTTP node with no certs.
+  elasticsearch.yml: |
+    xpack.security.enabled: false
+
+extraEnvs:
+- name: AWS_ACCESS_KEY_ID
+  value: minioadmin
+- name: AWS_SECRET_ACCESS_KEY
+  value: minioadmin

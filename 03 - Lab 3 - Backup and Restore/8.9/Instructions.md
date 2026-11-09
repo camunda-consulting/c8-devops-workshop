@@ -1,4 +1,4 @@
-# Trigger Backup and Restore
+# Trigger Backup and Restore (Camunda 8.9)
 
 ## Apply shared script config
 
@@ -16,10 +16,24 @@ kubectl apply -f ./script-config.yaml
 helm install minio oci://registry-1.docker.io/bitnamicharts/minio -f ./minio-values.yaml
 ```
 
+### Create the credentials secret
+
+Since 8.9 the Helm chart no longer generates secrets. Create the secret referenced by `camunda-values.yaml` (demo values, not for production):
+
+```bash
+kubectl create secret generic camunda-credentials \
+  --from-literal=identity-optimize-client-token=optimize-secret \
+  --from-literal=identity-orchestration-client-token=orchestration-secret \
+  --from-literal=identity-firstuser-password=demo \
+  --from-literal=identity-keycloak-admin-password=demo \
+  --from-literal=identity-keycloak-postgresql-admin-password=demo \
+  --from-literal=identity-keycloak-postgresql-user-password=demo
+```
+
 ### Install Camunda
 
 ```bash
-helm install camunda camunda/camunda-platform -f ./camunda-values.yaml
+helm install camunda camunda/camunda-platform --version 14.12.1 -f ./camunda-values.yaml
 ```
 
 ### Wait for ES to be ready
@@ -47,16 +61,21 @@ kubectl delete -f ./es-snapshot-minio-job.yaml
 ### Generate Data
 
 ```bash
-kubectl create configmap models --from-file=CamundaProcess.bpmn=./backup/BenchmarkProcess.bpmn
+kubectl create configmap models --from-file=BenchmarkProcess.bpmn=./backup/BenchmarkProcess.bpmn
 kubectl label configmap models type=camunda-backup-restore
 ```
 
 ```bash
-kubectl apply -f ./backup/zbctl-deploy-job.yaml 
+kubectl apply -f ./backup/deploy-process-job.yaml 
 ```
 
 ```bash
-kubectl logs -f $(kubectl get pods --selector=job-name=camunda-zbctl-deploy --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
+kubectl logs -f $(kubectl get pods --selector=job-name=camunda-deploy-process --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
+```
+When it is complete, you can delete the job:
+
+```bash
+kubectl delete -f ./backup/deploy-process-job.yaml
 ```
 
 ```bash
@@ -95,7 +114,7 @@ helm delete camunda
 ```
 
 ```bash
-kubectl delete pvc data-camunda-elasticsearch-master-0 data-camunda-elasticsearch-master-1 data-camunda-postgresql-0 data-camunda-zeebe-0 data-camunda-zeebe-1 data-camunda-zeebe-2
+kubectl delete pvc data-camunda-elasticsearch-master-0 data-camunda-postgresql-0 data-camunda-zeebe-0
 ```
 
 ## Restore
@@ -103,11 +122,11 @@ kubectl delete pvc data-camunda-elasticsearch-master-0 data-camunda-elasticsearc
 ### Create New Camunda Cluster
 
 ```bash
-helm install camunda camunda/camunda-platform -f ./camunda-values.yaml
+helm install camunda camunda/camunda-platform --version 14.12.1 -f ./camunda-values.yaml
 ```
 
 ```bash
-kubectl rollout status deploy/camunda-operate
+kubectl rollout status sts/camunda-zeebe
 ```
 
 Why? Templates and Aliases are created again.
@@ -123,7 +142,7 @@ kubectl apply -f ./es-snapshot-minio-job.yaml
 ```
 
 ```bash
-kubectl logs -f $(kubectl get pods --selector=job-name=es-snapshot-minio-job --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
+kubectl logs -f $(kubectl get pods --selector=job-name=camunda-es-snapshot-minio-job --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
 ```
 
 When it is complete, you can delete the job:
@@ -142,7 +161,7 @@ kubectl apply -f ./restore/find-backup.yaml
 kubectl logs -f $(kubectl get pods --selector=job-name=camunda-find-backup --output=jsonpath='{.items[*].metadata.name}' | awk '{print $1}') 
 ```
 
-Set the backup id you want to restore from to the `scamunda-script-config` and apply it again:
+Set the backup id you want to restore from to the `camunda-script-config` and apply it again:
 
 ```bash
 kubectl apply -f ./script-config.yaml
@@ -157,7 +176,7 @@ kubectl delete -f ./restore/find-backup.yaml
 ### Disable Zeebe & Webapps
 
 ```bash
-helm upgrade camunda camunda/camunda-platform -f ./camunda-values.yaml -f ./restore/camunda-index-restore.yaml
+helm upgrade camunda camunda/camunda-platform --version 14.12.1 -f ./camunda-values.yaml -f ./restore/camunda-index-restore.yaml
 ```
 
 ### Delete all Indices
@@ -165,11 +184,21 @@ helm upgrade camunda camunda/camunda-platform -f ./camunda-values.yaml -f ./rest
 ```bash
 kubectl apply -f ./restore/es-delete-all-indices.yaml
 ```
+When this is done, you can delete the job:
+
+```bash
+kubectl delete -f ./restore/es-delete-all-indices.yaml
+```
 
 ### Restore Snapshots
 
 ```bash
 kubectl apply -f ./restore/es-snapshot-restore-job.yaml
+```
+When this is done, you can delete the job:
+
+```bash
+kubectl delete -f ./restore/es-snapshot-restore-job.yaml
 ```
 
 ### Delete Zeebe disk
@@ -181,14 +210,16 @@ kubectl delete $(kubectl get pvc -o name | grep zeebe)
 ### Restore Zeebe
 
 ```bash
-helm upgrade camunda camunda/camunda-platform -f ./camunda-values.yaml -f ./restore/camunda-zeebe-restore.yaml
+helm upgrade camunda camunda/camunda-platform --version 14.12.1 -f ./camunda-values.yaml -f ./restore/camunda-zeebe-restore.yaml
 ```
 
 ### Return to normal platform state
 
 ```bash
-helm upgrade camunda camunda/camunda-platform -f ./camunda-values.yaml
+helm upgrade camunda camunda/camunda-platform --version 14.12.1 -f ./camunda-values.yaml
 ```
+
+> **NOTE:**  You can find the whole restore procedure scripted at ./restore/restore-backup.sh. BUT: This script must only be handled as a blueprint and adjusted to your needs. We don't guarantee that it will work in your environment, so make sure to enhance, test and maintain it on your own.
 
 ## Validate Restore
 
@@ -214,6 +245,10 @@ helm upgrade camunda camunda/camunda-platform -f ./camunda-values.yaml
 
 ```bash
 helm uninstall camunda
+```
+
+```bash
+kubectl delete pvc data-camunda-zeebe-0 data-camunda-postgresql-0 data-camunda-elasticsearch-master-0
 ```
 
 ```bash

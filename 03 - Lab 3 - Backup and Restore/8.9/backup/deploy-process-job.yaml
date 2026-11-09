@@ -1,0 +1,30 @@
+# Deploys BenchmarkProcess.bpmn via the Orchestration Cluster REST API (v2).
+# Replaces the zbctl-based job of the 8.8 lab. REST default port is 8080 since 8.9.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: camunda-deploy-process
+  labels:
+    type: camunda-backup-restore
+spec:
+  template:
+    spec:
+      containers:
+      - name: deploy-process
+        image: curlimages/curl
+        command:
+        - sh
+        - -c
+        - |
+          curl --fail -X POST "http://camunda-zeebe-gateway:8080/v2/deployments" \
+            -F "resources=@/models/BenchmarkProcess.bpmn;type=application/xml"
+        volumeMounts:
+        - name: models
+          mountPath: /models/BenchmarkProcess.bpmn
+          subPath: BenchmarkProcess.bpmn
+          readOnly: true
+      volumes:
+      - name: models
+        configMap:
+          name: models
+      restartPolicy: Never
