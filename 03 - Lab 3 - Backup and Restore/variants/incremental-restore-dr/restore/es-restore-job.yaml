@@ -1,0 +1,63 @@
+# Restores ES-only data (Operate/Tasklist webapp indices, Optimize indices,
+# raw zeebe-record_* indices) from a given backup ID into es-dr.
+#
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: camunda-es-restore
+  labels:
+    type: camunda-backup-restore
+spec:
+  template:
+    spec:
+      containers:
+      - name: es-restore
+        image: mbentley/swissarmy
+        envFrom:
+        - configMapRef:
+            name: camunda-script-config
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          #!/bin/sh
+          set -e
+
+          if [ -z "$BACKUP_ID" ]; then
+            echo "BACKUP_ID is not set in camunda-script-config. Set it and re-apply before running this job."
+            exit 1
+          fi
+
+          for repo in $SNAPSHOT_REPOSITORIES; do
+            echo -e "\n=== $repo: looking for snapshots from backup $BACKUP_ID ==="
+            snapshots=$(curl --fail -s "http://$ES_DR_ENDPOINT/_snapshot/$repo/*$BACKUP_ID*" | jq -r '.snapshots[].snapshot')
+
+            if [ -z "$snapshots" ]; then
+              echo "No snapshots found in $repo for backup $BACKUP_ID, skipping."
+              continue
+            fi
+
+            for snap in $snapshots; do
+              indices=$(curl --fail -s "http://$ES_DR_ENDPOINT/_snapshot/$repo/$snap" | jq -r '.snapshots[0].indices | join(",")')
+
+              if [ -z "$indices" ]; then
+                echo "Snapshot $snap has no indices, skipping."
+                continue
+              fi
+
+              echo "Closing (if present) before restore: $indices"
+              # ignore_unavailable=true: no error when these don't exist yet
+              # (first restore ever) — that's what makes this script work
+              # unchanged for both the first and every later incremental run.
+              curl --fail -X POST "http://$ES_DR_ENDPOINT/$indices/_close?ignore_unavailable=true"
+
+              echo "Restoring $snap -> $indices"
+              curl --fail -X POST "http://$ES_DR_ENDPOINT/_snapshot/$repo/$snap/_restore?wait_for_completion=true" \
+                -H 'Content-Type: application/json' \
+                -d "{\"indices\": \"$indices\", \"include_global_state\": false}"
+              echo -e "\nRestored $snap (ES automatically reopens indices once restore completes)"
+            done
+          done
+
+          echo -e "\nES restore complete for backup $BACKUP_ID. Zeebe broker data (backupRuntime) was NOT touched by this job."
+      restartPolicy: OnFailure

@@ -1,0 +1,533 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: camunda-restore-runner
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: camunda-restore-runner
+  namespace: default
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: camunda-restore-runner
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: camunda-restore-runner
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: camunda-restore-runner
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: camunda-restore-assets
+  namespace: default
+data:
+  restore-backup.sh: |
+    #!/bin/sh
+
+    CAMUNDA_NAMESPACE="default"
+    CAMUNDA_RELEASE_NAME="camunda"
+
+    #
+    # Helper functions
+    #
+
+    log() {
+      echo "[$(date +'%Y-%m-%d %H:%M:%S')] INFO: $*"
+    }
+
+    log_section() {
+      echo ""
+      echo "==============================================================="
+      echo "  $*"
+      echo "==============================================================="
+    }
+
+    wait_for_log_pattern_pod() {
+      local namespace="$1"
+      local pod_name="$2"
+      local pattern="$3"
+      local timeout="$4"
+
+      log "Waiting for log pattern in pod: $pod_name (timeout: ${timeout}s)"
+
+      local deadline=$((SECONDS + timeout))
+      while (( SECONDS < deadline )); do
+        # Always check BOTH current and previous logs on every iteration.
+        # This avoids missing the pattern when the restore container completes
+        # and the pod restarts faster than the polling interval (1s).
+        #
+        # Scenario A: pod is still in restore mode  -> pattern is in current logs
+        # Scenario B: restore done, pod restarted   -> pattern is in previous logs
+        if kubectl -n "$namespace" logs "$pod_name" 2>/dev/null | grep -qF "$pattern"; then
+          local restart_count
+          restart_count="$(kubectl -n "$namespace" get pod "$pod_name" \
+            -o jsonpath='{.status.containerStatuses[0].restartCount}' 2>/dev/null || echo 0)"
+          log "Found log pattern in pod: $pod_name (current logs, restartCount=$restart_count)"
+          return 0
+        fi
+
+        if kubectl -n "$namespace" logs "$pod_name" --previous 2>/dev/null | grep -qF "$pattern"; then
+          local restart_count
+          restart_count="$(kubectl -n "$namespace" get pod "$pod_name" \
+            -o jsonpath='{.status.containerStatuses[0].restartCount}' 2>/dev/null || echo 0)"
+          log "Found log pattern in pod: $pod_name (previous logs, restartCount=$restart_count)"
+          return 0
+        fi
+
+        log "Pattern not found yet in $pod_name (current or previous logs), retrying in 1s..."
+        sleep 1
+      done
+
+      log "Timed out waiting for log pattern in pod: $pod_name"
+      log "Last logs from $pod_name:"
+      kubectl -n "$namespace" logs "$pod_name" --tail=20 || true
+      return 2
+    }
+
+    wait_for_log_pattern_all_zeebe_pods() {
+      local namespace="$1"
+      local label_selector="$2"
+      local pattern="$3"
+      local timeout_per_pod="$4"
+
+      log "Finding Zeebe broker pods with selector: $label_selector"
+
+      # Get all Zeebe broker pods
+      local pods
+      pods="$(kubectl -n "$namespace" get pods -l "$label_selector" \
+        -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)"
+
+      if [[ -z "$pods" ]]; then
+        log "No Zeebe pods found with label selector: $label_selector"
+        return 2
+      fi
+
+      log "Found Zeebe pods:"
+      echo "$pods" | sed 's/^/  - /'
+
+      # Check each pod sequentially
+      while IFS= read -r pod; do
+        [[ -z "$pod" ]] && continue
+        wait_for_log_pattern_pod "$namespace" "$pod" "$pattern" "$timeout_per_pod" || return 2
+      done <<< "$pods"
+
+      log "Log pattern found in all Zeebe pods"
+    }
+
+    #
+    # Restore procedure
+    #
+
+    # Create new Camunda cluster for ES templates
+    log_section "Step 1: Creating Camunda cluster for ES templates"
+    helm install $CAMUNDA_RELEASE_NAME camunda/camunda-platform -f ./camunda-values.yaml -n "$CAMUNDA_NAMESPACE" --wait
+    log "Initial Camunda Platform installed successfully for ES templates"
+
+    # Create ES snapshot repository
+    log_section "Step 2: Creating Elasticsearch snapshot repository"
+    kubectl apply -f ./es-snapshot-minio-job.yaml -n "$CAMUNDA_NAMESPACE"
+    kubectl wait --for=condition=complete --timeout=600s job/camunda-es-snapshot-minio-job -n "$CAMUNDA_NAMESPACE"
+    log "Elasticsearch snapshot repository created successfully"
+
+    # Disable Zeebe & Webapps
+    log_section "Step 3: Disabling Zeebe and Webapps"
+    helm upgrade $CAMUNDA_RELEASE_NAME camunda/camunda-platform \
+      -f ./camunda-values.yaml \
+      -f ./restore/camunda-index-restore.yaml \
+      -n "$CAMUNDA_NAMESPACE" \
+      --wait
+    log "Zeebe and Webapps disabled successfully"
+
+    # Delete all indices in ES
+    log_section "Step 4: Deleting all Elasticsearch indices"
+    kubectl apply -f ./restore/es-delete-all-indices.yaml -n "$CAMUNDA_NAMESPACE"
+    kubectl wait --for=condition=complete --timeout=600s job/camunda-es-delete-all-indices-job -n "$CAMUNDA_NAMESPACE"
+    log "Elasticsearch indices deleted successfully"
+
+    # Restore all snapshots in ES
+    log_section "Step 5: Restoring Elasticsearch snapshots"
+    kubectl apply -f ./restore/es-snapshot-restore-job.yaml -n "$CAMUNDA_NAMESPACE"
+    kubectl wait --for=condition=complete --timeout=600s job/camunda-es-snapshot-restore-job -n "$CAMUNDA_NAMESPACE"
+    log "Elasticsearch indices restored successfully"
+
+    # Delete Zeebe disks
+    log_section "Step 6: Deleting Zeebe persistent volumes claims"
+    kubectl delete $(kubectl get pvc -o name | grep zeebe) -n "$CAMUNDA_NAMESPACE" --wait
+    log "Zeebe persistent volumes claims deleted successfully"
+
+    # Restore Zeebe
+    log_section "Step 7: Restoring Zeebe from backup"
+
+    LOG_PATTERN="Successfully restored broker from backup"
+    ZEEBE_LABEL_SELECTOR="app.kubernetes.io/component=zeebe-broker,app.kubernetes.io/instance=$CAMUNDA_RELEASE_NAME"
+    TIMEOUT_SECONDS_PER_POD=600
+
+    helm upgrade $CAMUNDA_RELEASE_NAME camunda/camunda-platform \
+      -f ./camunda-values.yaml \
+      -f ./restore/camunda-zeebe-restore.yaml \
+      -n "$CAMUNDA_NAMESPACE"
+    wait_for_log_pattern_all_zeebe_pods \
+      "$CAMUNDA_NAMESPACE" \
+      "$ZEEBE_LABEL_SELECTOR" \
+      "$LOG_PATTERN" \
+      "$TIMEOUT_SECONDS_PER_POD"
+    log "Zeebe restored successfully"
+
+    # Return to normal platform state
+    log_section "Step 8: Restoring platform to normal state"
+    helm upgrade $CAMUNDA_RELEASE_NAME camunda/camunda-platform -f ./camunda-values.yaml -n "$CAMUNDA_NAMESPACE"
+    REPLICAS="$(kubectl get statefulset $CAMUNDA_RELEASE_NAME-zeebe -n "$CAMUNDA_NAMESPACE" -o jsonpath='{.spec.replicas}')"
+    kubectl scale statefulset $CAMUNDA_RELEASE_NAME-zeebe --replicas 0 -n "$CAMUNDA_NAMESPACE"
+    kubectl scale statefulset $CAMUNDA_RELEASE_NAME-zeebe --replicas "$REPLICAS" -n "$CAMUNDA_NAMESPACE"
+    kubectl rollout status statefulset $CAMUNDA_RELEASE_NAME-zeebe -n "$CAMUNDA_NAMESPACE"
+    log "Camunda restore completed successfully"
+
+    # Cleanup jobs
+    log_section "Step 9: Cleanup jobs"
+    kubectl delete -f ./es-snapshot-minio-job.yaml -n "$CAMUNDA_NAMESPACE" --wait
+    kubectl delete -f ./restore/es-delete-all-indices.yaml -n "$CAMUNDA_NAMESPACE" --wait
+    kubectl delete -f ./restore/es-snapshot-restore-job.yaml -n "$CAMUNDA_NAMESPACE" --wait
+    log "Restore jobs cleaned up successfully"
+
+    log "Successfully completed restore procedure. Camunda Platform is now running with restored data."
+  camunda-values.yaml: |
+    global:
+      secrets:
+        autoGenerated: true
+        name: camunda-credentials
+      security:
+        authentication:
+          method: oidc
+      identity:
+        auth:
+          enabled: true
+          publicIssuerUrl: http://localhost:18080/auth/realms/camunda-platform
+          optimize:
+            redirectUrl: http://localhost:8083
+            secret:
+              existingSecret: camunda-credentials
+              existingSecretKey: identity-optimize-client-token
+          orchestration:
+            redirectUrl: http://localhost:8080
+            secret:
+              existingSecret: camunda-credentials
+              existingSecretKey: identity-orchestration-client-token
+
+    connectors:
+      enabled: false
+
+    orchestration:
+      enabled: true
+      security:
+        authentication:
+          oidc:
+            redirectUrl: http://localhost:8080
+            secret:
+              existingSecret: camunda-credentials
+              existingSecretKey: identity-orchestration-client-token
+          unprotectedApi: true
+        authorizations:
+          enabled: false
+      env:
+      - name: SPRING_PROFILES_INCLUDE
+        value: "backup"
+      extraConfiguration:
+        application-backup.yaml: |
+          camunda:
+            data:
+              backup:
+                repository-name: "camunda-backup"
+
+          zeebe:
+            broker:
+              data:
+                backup:
+                  enabled: true
+                  store: S3
+                  s3:
+                    bucketName: camunda
+                    forcePathStyleAccess: true
+                    endpoint: http://minio:9000
+                    accessKey: minioadmin
+                    secretKey: minioadmin
+                    region: us-east-1
+                    basePath: zeebe
+
+    identity:
+      enabled: true
+      firstUser:
+        enabled: true
+        secret:
+          existingSecret: camunda-credentials
+          existingSecretKey: identity-firstuser-password
+
+    identityKeycloak:
+      enabled: true
+      postgresql:
+        auth:
+          existingSecret: camunda-credentials
+          secretKeys:
+            adminPasswordKey: identity-keycloak-postgresql-admin-password
+            userPasswordKey: identity-keycloak-postgresql-user-password
+      auth:
+        existingSecret: camunda-credentials
+        passwordSecretKey: identity-keycloak-admin-password
+
+    optimize:
+      enabled: true
+      migration:
+        enabled: false
+      env:
+      - name: CAMUNDA_OPTIMIZE_BACKUP_REPOSITORY_NAME
+        value: "optimize-backup"
+
+    elasticsearch:
+      enabled: true
+      master:
+        masterOnly: false
+        replicaCount: 1
+      data:
+        replicaCount: 0
+      coordinating:
+        replicaCount: 0
+      ingest:
+        replicaCount: 0
+      image:
+        repository: bitnamilegacy/elasticsearch
+        tag: 8.18.0
+      global:
+       kibanaEnabled: true
+      kibana:
+        image:
+          repository: bitnamilegacy/kibana
+          tag: 8.18.0
+        readinessProbe:
+          enabled: false
+      initScripts:
+        init-keystore.sh: |
+          #!/bin/bash
+          set -e
+
+          echo "Adding S3 access keys to Elasticsearch keystore..."
+
+          # Add S3 client default keys to the keystore
+          echo "$S3_SECRET_KEY" | elasticsearch-keystore add -f -x s3.client.default.secret_key
+          echo "$S3_ACCESS_KEY" | elasticsearch-keystore add -f -x s3.client.default.access_key
+      extraEnvVars:
+      - name: S3_SECRET_KEY
+        value: minioadmin
+      - name: S3_ACCESS_KEY
+        value: minioadmin
+  es-snapshot-minio-job.yaml: |
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: camunda-es-snapshot-minio-job
+      labels:
+        type: camunda-backup-restore
+    spec:
+      template:
+        spec:
+          containers:
+          - name: es-snapshot
+            image: curlimages/curl
+            envFrom:
+            - configMapRef:
+                name: camunda-script-config
+            command: ["/bin/sh"]
+            args:
+            - -c
+            - |
+              #!/bin/sh
+              set -e
+
+              # Define base paths
+              basePaths=$SNAPSHOT_REPOSITORIES
+
+              # Define bucket name
+              bucket=$MINIO_BUCKET
+
+              # MinIO specific settings
+              endpoint=$MINIO_ENDPOINT
+
+              # Iterate over each bucket name to register it as a snapshot repository without specifying access and secret keys
+              for basePath in $basePaths; do
+                curl --fail -X PUT "http://$ELASTIC_ENDPOINT/_snapshot/$basePath" -H 'Content-Type: application/json' -d '
+                {
+                  "type": "s3",
+                  "settings": {
+                    "bucket": "'"$bucket"'",
+                    "endpoint": "'"$endpoint"'",
+                    "protocol": "http",
+                    "compress": true,
+                    "client": "default",
+                    "path_style_access": true,
+                    "base_path": "'"$basePath"'"
+                  }
+                }'
+                echo "Repository $basePath registered with MinIO using keystore credentials."
+              done
+          restartPolicy: OnFailure
+  camunda-index-restore.yaml: |
+    connectors:
+      enabled: false
+    optimize:
+      enabled: false
+    orchestration:
+      enabled: false
+  es-delete-all-indices.yaml: |
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: camunda-es-delete-all-indices-job
+      labels:
+        type: camunda-backup-restore
+    spec:
+      template:
+        spec:
+          containers:
+          - name: delete-indices
+            image: curlimages/curl
+            envFrom:
+            - configMapRef:
+                name: camunda-script-config
+            command: ["/bin/sh", "-c"]
+            args:
+            - |
+              #!/bin/sh
+              set -eo pipefail
+              elasticsearch_endpoint=$ELASTIC_ENDPOINT
+
+              indices=$(curl --fail -s "$elasticsearch_endpoint/_cat/indices?h=index" | grep -v '^\.')
+
+              for index in $indices; do
+                echo "Deleting index: $index"
+                curl --fail -X DELETE "$elasticsearch_endpoint/$index"
+              done
+
+              echo "All non-system indices have been deleted."
+          restartPolicy: Never
+  es-snapshot-restore-job.yaml: |
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: camunda-es-snapshot-restore-job
+      labels:
+        type: camunda-backup-restore
+    spec:
+      template:
+        spec:
+          containers:
+          - name: es-snapshot-restore
+            image: curlimages/curl
+            envFrom:
+            - configMapRef:
+                name: camunda-script-config
+            command: ["/bin/sh"]
+            args:
+            - -c
+            - |
+              #!/bin/sh
+              set -e
+
+              for repository in $SNAPSHOT_REPOSITORIES; do
+                echo "Processing repository: $repository"
+
+                response=$(curl --fail -s "$ELASTIC_ENDPOINT/_snapshot/$repository/_all")
+
+                echo "$response" | grep -o "\"snapshot\":\"[^\"]*$BACKUP_ID[^\"]*\"" | cut -d':' -f2 | tr -d '"' | while read -r snapshot; do
+                  if [ -n "$snapshot" ]; then
+                    echo "Found snapshot matching criteria: $snapshot in $repository"
+                    echo "Restoring snapshot: $snapshot in repository: $repository"
+                    curl --fail --request POST "$ELASTIC_ENDPOINT/_snapshot/$repository/$snapshot/_restore?wait_for_completion=true"
+                    echo "Restore completed for snapshot: $snapshot in repository: $repository"
+                  else
+                    echo "ERROR: No matching snapshots found in repository $repository." >&2
+                    exit 1
+                  fi
+                done
+              done
+
+              echo "Restore operations for all repositories completed."
+          restartPolicy: OnFailure
+  camunda-zeebe-restore.yaml: |
+    orchestration:
+       enabled: true
+       env:
+       - name: ZEEBE_RESTORE_IGNOREFILESINTARGET
+         value: ".snapshot,lost+found"
+       - name: ZEEBE_RESTORE
+         value: "true"
+       - name: ZEEBE_RESTORE_FROM_BACKUP_ID
+         valueFrom:
+           configMapKeyRef:
+             name: camunda-script-config
+             key: BACKUP_ID
+       - name: SPRING_PROFILES_INCLUDE
+         value: "backup"
+    connectors:
+       enabled: false
+    optimize:
+       enabled: false
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: camunda-restore-runner
+  namespace: default
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      serviceAccountName: camunda-restore-runner
+      restartPolicy: Never
+      containers:
+        - name: restore
+          image: alpine/helm:3.18.6
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              apk add --no-cache bash kubectl >/dev/null
+              chmod +x /work/restore-backup.sh
+              cd /work
+              /bin/bash /work/restore-backup.sh
+          workingDir: /work
+          volumeMounts:
+            - name: restore-assets
+              mountPath: /work
+      volumes:
+        - name: restore-assets
+          configMap:
+            name: camunda-restore-assets
+            defaultMode: 0755
+            items:
+              - key: restore-backup.sh
+                path: restore-backup.sh
+              - key: camunda-values.yaml
+                path: camunda-values.yaml
+              - key: es-snapshot-minio-job.yaml
+                path: es-snapshot-minio-job.yaml
+              - key: camunda-index-restore.yaml
+                path: restore/camunda-index-restore.yaml
+              - key: es-delete-all-indices.yaml
+                path: restore/es-delete-all-indices.yaml
+              - key: es-snapshot-restore-job.yaml
+                path: restore/es-snapshot-restore-job.yaml
+              - key: camunda-zeebe-restore.yaml
+                path: restore/camunda-zeebe-restore.yaml
+
