@@ -1,0 +1,12 @@
+connectors:
+  enabled: false
+optimize:
+  enabled: false
+operate:
+  enabled: false
+tasklist:
+  enabled: false
+zeebe:
+  enabled: false
+zeebeGateway:
+  enabled: false

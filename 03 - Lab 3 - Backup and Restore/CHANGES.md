@@ -2,28 +2,6 @@
 
 Newest first. Keep entries short: what changed and *why*. Details: `git diff --no-index 8.8 8.9`.
 
-## 8.9 → 8.10 (standard procedure)
-
-> **Status: derived from the 8.10 documentation and the Camunda reference deployment, not yet run end to end.** Test before showing it to a customer.
-
-- **Chart `15.4.0`.** Helm CLI v3 (3.10+) or v4.
-- **Bitnami subcharts are gone** (Elasticsearch, PostgreSQL, Keycloak). New folder `operators/` with `install-operators.sh` and the manifests for
-  Elasticsearch (ECK 3.5.0, ES 9.5.5), PostgreSQL (CloudNativePG 1.30.1, clusters `pg-keycloak`, `pg-identity`) and Keycloak (Keycloak operator 26.8.1).
-  Single-node sizing for the lab; versions follow `camunda-deployment-references` (`stable/8.10`).
-- **Values:** `elasticsearch`, `identityKeycloak` and `global.elasticsearch` removed; Elasticsearch settings now under `orchestration.data.secondaryStorage.elasticsearch` and
-  `optimize.database.elasticsearch`; Keycloak and the Identity database are external; backup uses `camunda.data.primary-storage.backup.*`.
-- **Elasticsearch has authentication** (ECK): all jobs that call Elasticsearch now use the user `elastic` (password from `elasticsearch-es-elastic-user`).
-  The S3/MinIO credentials for the snapshot repositories are provided via ECK `secureSettings` (secret `es-s3-credentials`) instead of the keystore init script.
-  Endpoint is now `elasticsearch-es-http:9200`.
-- **Restore uses the new Restore API** (recovery mode, no broker restart): `restore/enter-recovery-mode-job.yaml` and `restore/restore-api-job.yaml` replace
-  `camunda-index-restore.yaml`, `camunda-zeebe-restore.yaml` (ZEEBE_RESTORE helm upgrade) and the deletion of the Zeebe PVCs.
-  Optimize is scaled down (not disabled via values) during the Elasticsearch restore, so the exporter configuration stays intact.
-- **Backup is unchanged:** the actuator endpoints (`backupHistory`, `backupRuntime`, Optimize) still work; the REST variants (`/v2/backups/...`) need authentication and are optional.
-- **Removed:** Kibana screenshot (no bundled Kibana), `restore-backup-job.yaml` (embedded values copy; use `restore/restore-backup.sh`).
-- **Known gaps / to verify:** Optimize deployment name (`camunda-optimize`), Identity/Keycloak wiring with the external Keycloak, the `/v2/restore` status response format, ECK PVC cleanup on deletion.
-
-Docs used: [8.10 announcements](https://docs.camunda.io/docs/reference/announcements-release-notes/8100/8100-announcements/), [operator-based infrastructure](https://docs.camunda.io/docs/self-managed/deployment/helm/configure/operator-based-infrastructure/), [Restore API](https://docs.camunda.io/docs/self-managed/operational-guides/backup-restore/elasticsearch/es-restore-api/).
-
 ## 8.8 → 8.9 (standard procedure)
 
 > **Status: derived from the 8.9 release notes and the incremental-restore variant, not yet run end to end.** Test before showing it to a customer.
@@ -36,6 +14,15 @@ Docs used: [8.10 announcements](https://docs.camunda.io/docs/reference/announcem
 - **Known gap**: `restore/restore-backup-job.yaml` embeds its own copy of `camunda-values.yaml`; it must be synced with the 8.9 values before use.
 
 Docs used: [What's new in 8.9](https://docs.camunda.io/docs/reference/announcements-release-notes/890/whats-new-in-89/), [8.9 announcements](https://docs.camunda.io/docs/reference/announcements-release-notes/890/890-announcements/).
+
+## 8.7 → 8.8 (standard procedure)
+
+`8.7/` is the lab exactly as it was on `main` before the versioned folders were introduced (Operate, Tasklist and Optimize each with their own backup repository, `zbctl` deploy job).
+
+- Values restructured for the 8.8 chart: the web applications run inside the Orchestration Cluster (`orchestration:`), Identity/Keycloak setup added; updated `minio-values.yaml`.
+- `create-backup.yaml` uses the new `/actuator/backupHistory` (Operate/Tasklist) and `/actuator/backupRuntime` (Zeebe) endpoints.
+- Restore jobs and `script-config.yaml` adapted; added `restore/restore-backup.sh` (automated restore) and its RBAC manifest `restore/restore-backup-job.yaml`.
+- Details: `git diff --no-index 8.7 8.8`.
 
 ## 8.8
 

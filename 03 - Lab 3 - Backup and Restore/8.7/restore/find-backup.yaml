@@ -1,0 +1,24 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: camunda-find-backup
+  labels:
+    type: camunda-backup-restore
+spec:
+  template:
+    spec:
+      containers:
+      - name: find-backup
+        image: mbentley/swissarmy
+        envFrom:
+        - configMapRef:
+            name: camunda-script-config
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          #!/bin/sh
+          set -e
+
+          curl --fail "http://$CAMUNDA_RELEASE_NAME-zeebe-gateway:9600/actuator/backups" | jq 'sort_by(.backupId) | .[] | select(.state == "COMPLETED") | .backupId'
+      restartPolicy: OnFailure

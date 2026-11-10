@@ -6,9 +6,9 @@ The instructions and manifests in this lab depend on the Camunda minor version, 
 
 | Camunda version | Folder | Status |
 |---|---|---|
-| 8.10 | [`8.10/`](./8.10/Instructions.md) | **not yet tested end to end**, needs operators (ECK, CloudNativePG, Keycloak), see [CHANGES.md](./CHANGES.md) |
 | 8.9 | [`8.9/`](./8.9/Instructions.md) | **not yet tested end to end**, see [CHANGES.md](./CHANGES.md) |
 | 8.8 | [`8.8/`](./8.8/Instructions.md) | tested |
+| 8.7 | [`8.7/`](./8.7/Instructions.md) | legacy, for customers not yet on 8.8; content as it was on `main` before the restructure |
 
 ## Variants
 
